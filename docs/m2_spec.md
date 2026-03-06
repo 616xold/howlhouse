@@ -80,9 +80,9 @@ Return a single match record.
 ### 5) `GET /matches/{match_id}/replay?visibility={all|public|spoilers}`
 
 - media type: `application/x-ndjson`
-- `all` (default): exact replay lines
-- `public`: server-side filter to events where `visibility == "public"`
+- `public` (default): server-side filter to events where `visibility == "public"`
 - `spoilers` (M3 extension): `public` events plus `roles_assigned` only
+- `all`: exact replay lines, admin-only
 - returns `409` if replay is not ready
 
 ### 6) `GET /matches/{match_id}/events?visibility={all|public|spoilers}`
@@ -103,9 +103,9 @@ data: {"id":"evt_000123",...}
 
 Visibility filtering:
 
-- `all`: all history/live JSON lines
 - `public`: only events with `visibility == "public"`
 - `spoilers`: `public` events plus `roles_assigned` only
+- `all`: all history/live JSON lines, admin-only
 
 ## EventBus behavior
 

@@ -20,6 +20,7 @@ from howlhouse.platform.access_control import (
     require_mutation_access,
 )
 from howlhouse.platform.observability import increment_matches_created, increment_matches_run
+from howlhouse.platform.runtime_policy import ensure_agent_runtime_allowed
 from howlhouse.platform.store import MatchRecord
 
 router = APIRouter(prefix="/matches", tags=["matches"])
@@ -56,7 +57,7 @@ def _build_links(match_id: str) -> dict[str, str]:
 
 
 def _record_to_dto(record: MatchRecord, *, admin_view: bool) -> dict[str, Any]:
-    return {
+    payload = {
         "match_id": record.match_id,
         "seed": record.seed,
         "agent_set": record.agent_set,
@@ -64,7 +65,6 @@ def _record_to_dto(record: MatchRecord, *, admin_view: bool) -> dict[str, Any]:
         "names": record.names,
         "season_id": record.season_id,
         "tournament_id": record.tournament_id,
-        "created_by_identity_id": record.created_by_identity_id,
         "created_by_ip": record.created_by_ip if admin_view else None,
         "hidden_at": record.hidden_at,
         "hidden_reason": record.hidden_reason,
@@ -72,14 +72,17 @@ def _record_to_dto(record: MatchRecord, *, admin_view: bool) -> dict[str, Any]:
         "created_at": record.created_at,
         "started_at": record.started_at,
         "finished_at": record.finished_at,
-        "replay_path": record.replay_path,
-        "replay_key": record.replay_key,
-        "replay_uri": record.replay_uri,
         "winner": record.winner,
         "error": record.error,
-        "postprocess_error": record.postprocess_error,
         "links": _build_links(record.match_id),
     }
+    if admin_view:
+        payload["created_by_identity_id"] = record.created_by_identity_id
+        payload["replay_path"] = record.replay_path
+        payload["replay_key"] = record.replay_key
+        payload["replay_uri"] = record.replay_uri
+        payload["postprocess_error"] = record.postprocess_error
+    return payload
 
 
 def _get_match_or_404(request: Request, match_id: str) -> MatchRecord:
@@ -90,6 +93,32 @@ def _get_match_or_404(request: Request, match_id: str) -> MatchRecord:
     if record.hidden_at is not None and not is_admin_request(request):
         raise HTTPException(status_code=404, detail=f"Match not found: {match_id}")
     return record
+
+
+def _resolved_visibility(
+    request: Request, *, visibility: Literal["all", "public", "spoilers"]
+) -> Literal["all", "public", "spoilers"]:
+    if visibility == "all" and not is_admin_request(request):
+        raise HTTPException(status_code=403, detail="visibility=all requires admin access")
+    return visibility
+
+
+def _validate_registered_agents_for_match(request: Request, match_id: str) -> None:
+    store = request.app.state.store
+    settings = request.app.state.settings
+    for roster_row in store.list_match_players(match_id):
+        if roster_row.agent_type != "registered" or not roster_row.agent_id:
+            continue
+        agent_record = store.get_agent(roster_row.agent_id)
+        if agent_record is None:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Unknown agent_id in roster: {roster_row.agent_id}",
+            )
+        try:
+            ensure_agent_runtime_allowed(settings, agent_record.runtime_type)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 def _job_to_dto(job) -> dict[str, Any]:
@@ -142,6 +171,7 @@ def _resolve_roster_and_names(
     body: CreateMatchRequest,
     config: GameConfig,
     store,
+    settings,
 ) -> tuple[list[dict[str, Any]], dict[str, str], list[dict[str, str]] | None]:
     expected_player_ids = _expected_player_ids(config.player_count)
     names_input = {player_id: str(name) for player_id, name in body.names.items()}
@@ -207,6 +237,15 @@ def _resolve_roster_and_names(
                     status_code=422,
                     detail=f"Unknown agent_id in roster: {entry.agent_id}",
                 )
+            if agent_record.hidden_at is not None:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Hidden agent_id cannot be used in new matches: {entry.agent_id}",
+                )
+            try:
+                ensure_agent_runtime_allowed(settings, agent_record.runtime_type)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
             resolved_name = selected_name or agent_record.name
             normalized_agent_id = agent_record.agent_id
         else:
@@ -303,6 +342,7 @@ def create_match(body: CreateMatchRequest, request: Request) -> dict[str, Any]:
         body=body,
         config=config,
         store=store,
+        settings=request.app.state.settings,
     )
     match_id = _match_id_for_request(body=body, normalized_roster=normalized_roster)
     replay_path = str(Path("replays") / f"{match_id}.jsonl")
@@ -361,8 +401,9 @@ def run_match(
     store = request.app.state.store
     runner = request.app.state.runner
     require_mutation_access(request, action=ACTION_MATCH_RUN)
+    record = _get_match_or_404(request, match_id)
+    _validate_registered_agents_for_match(request, match_id)
     if not sync:
-        record = _get_match_or_404(request, match_id)
         if record.status == "finished":
             return _record_to_dto(record, admin_view=is_admin_request(request))
         if record.status not in {"created", "failed", "running"}:
@@ -399,7 +440,6 @@ def run_match(
         payload["job"] = _job_to_dto(job)
         return payload
 
-    _get_match_or_404(request, match_id)
     try:
         record = runner.run(match_id, sync=sync)
     except KeyError as exc:
@@ -413,9 +453,10 @@ def run_match(
 def get_replay(
     match_id: str,
     request: Request,
-    visibility: Literal["all", "public", "spoilers"] = Query(default="all"),
+    visibility: Literal["all", "public", "spoilers"] = Query(default="public"),
 ):
     record = _get_match_or_404(request, match_id)
+    visibility = _resolved_visibility(request, visibility=visibility)
 
     if record.status != "finished" or not record.replay_path:
         raise HTTPException(
@@ -450,11 +491,46 @@ def get_replay(
 async def stream_events(
     match_id: str,
     request: Request,
-    visibility: Literal["all", "public", "spoilers"] = Query(default="all"),
+    visibility: Literal["all", "public", "spoilers"] = Query(default="public"),
 ):
     bus = request.app.state.bus
 
-    _get_match_or_404(request, match_id)
+    record = _get_match_or_404(request, match_id)
+    visibility = _resolved_visibility(request, visibility=visibility)
+
+    if record.status == "finished":
+        replay_path = Path(record.replay_path) if record.replay_path else None
+        if replay_path is not None and replay_path.exists():
+            iterator = (
+                _sse_message(line.rstrip("\n"), visibility)
+                for line in _iter_replay_lines(replay_path, visibility)
+            )
+        else:
+            blob_store = request.app.state.blob_store
+            if not record.replay_key or not blob_store.exists(record.replay_key):
+                raise HTTPException(
+                    status_code=409,
+                    detail={"status": record.status, "message": "replay file missing"},
+                )
+            replay_text = blob_store.get_text(record.replay_key)
+            iterator = (
+                _sse_message(line.rstrip("\n"), visibility)
+                for line in _iter_replay_lines_from_text(replay_text, visibility)
+            )
+
+        async def replay_stream():
+            for message in iterator:
+                if message is not None:
+                    yield message
+
+        return StreamingResponse(
+            replay_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     history, queue = bus.subscribe(match_id)
 

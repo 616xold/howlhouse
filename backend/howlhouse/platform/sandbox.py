@@ -16,6 +16,10 @@ from howlhouse.core.config import Settings
 from howlhouse.engine.domain.models import GameConfig, NightAction, PublicMessage, Vote
 from howlhouse.engine.runtime.agents.base import AgentAction
 from howlhouse.engine.runtime.observation import Observation
+from howlhouse.platform.runtime_policy import (
+    ensure_agent_runtime_allowed,
+    unsafe_local_agent_runtime_allowed,
+)
 
 PLAYER_ID_PATTERN = re.compile(r"^p\d+$")
 HARNESS_PATH = Path(__file__).with_name("sandbox_harness.py")
@@ -408,9 +412,10 @@ def create_registered_agent_proxy(
     seed: int,
     config: GameConfig,
 ) -> SandboxAgentProxy:
-    allow_local_fallback = settings.sandbox_allow_local_fallback
-    if settings.env.strip().lower() == "production":
-        allow_local_fallback = False
+    ensure_agent_runtime_allowed(settings, runtime_type)
+    allow_local_fallback = (
+        settings.sandbox_allow_local_fallback and unsafe_local_agent_runtime_allowed(settings)
+    )
 
     normalized_runtime = runtime_type
     if runtime_type == "docker_py_v1" and not docker_available():
@@ -419,11 +424,9 @@ def create_registered_agent_proxy(
         else:
             raise RuntimeError(
                 "Docker runtime requested but docker is unavailable; "
-                "local fallback is disabled in production"
+                "local fallback is disabled in this environment"
             )
-
-    if normalized_runtime not in {"docker_py_v1", "local_py_v1"}:
-        raise ValueError(f"Unsupported runtime_type: {runtime_type}")
+    ensure_agent_runtime_allowed(settings, normalized_runtime)
 
     return SandboxAgentProxy(
         settings=settings,

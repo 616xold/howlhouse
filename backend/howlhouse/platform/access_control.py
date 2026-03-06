@@ -253,6 +253,11 @@ def _quota_limit_for_action(*, settings, mode: str, action: str) -> tuple[int, i
         configured_window = int(settings.quota_match_run_window_s)
         strict_default = (40, 60)
         open_default = (400, 60)
+    elif action == ACTION_PREDICTION_MUTATION:
+        configured_max = int(settings.quota_prediction_mutation_max)
+        configured_window = int(settings.quota_prediction_mutation_window_s)
+        strict_default = (60, 3600)
+        open_default = (500, 3600)
     elif action in (ACTION_TOURNAMENT_RUN, ACTION_TOURNAMENT_CREATE):
         if action == ACTION_TOURNAMENT_CREATE:
             configured_max = int(settings.quota_tournament_create_max)

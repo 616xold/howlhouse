@@ -11,12 +11,14 @@ from howlhouse.engine.runtime.game_engine import GameEngine
 from howlhouse.engine.runtime.observation import Observation
 from howlhouse.engine.runtime.replay_integrity import derive_replay_outcome
 
+ADMIN_HEADERS = {"X-HowlHouse-Admin": "ops-secret"}
+
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     db_path = tmp_path / "howlhouse.db"
-    settings = Settings(env="test", database_url=f"sqlite:///{db_path}")
+    settings = Settings(env="test", database_url=f"sqlite:///{db_path}", admin_tokens="ops-secret")
     app = create_app(settings)
     with TestClient(app) as test_client:
         yield test_client
@@ -35,7 +37,9 @@ def _run_match_sync(client: TestClient, match_id: str) -> dict:
 
 
 def _read_replay_events(client: TestClient, match_id: str, visibility: str = "all") -> list[dict]:
-    response = client.get(f"/matches/{match_id}/replay?visibility={visibility}")
+    response = client.get(
+        f"/matches/{match_id}/replay?visibility={visibility}", headers=ADMIN_HEADERS
+    )
     assert response.status_code == 200
     return [json.loads(line) for line in response.text.splitlines() if line.strip()]
 
@@ -83,11 +87,17 @@ def test_sse_events_match_replay_all_visibility(client: TestClient):
     match_id = created["match_id"]
     _run_match_sync(client, match_id)
 
-    replay_response = client.get(f"/matches/{match_id}/replay?visibility=all")
+    replay_response = client.get(
+        f"/matches/{match_id}/replay?visibility=all", headers=ADMIN_HEADERS
+    )
     assert replay_response.status_code == 200
     replay_lines = [line for line in replay_response.text.splitlines() if line.strip()]
 
-    with client.stream("GET", f"/matches/{match_id}/events?visibility=all") as response:
+    with client.stream(
+        "GET",
+        f"/matches/{match_id}/events?visibility=all",
+        headers=ADMIN_HEADERS,
+    ) as response:
         assert response.status_code == 200
         assert response.headers.get("cache-control") == "no-cache"
         assert response.headers.get("x-accel-buffering") == "no"
@@ -97,6 +107,33 @@ def test_sse_events_match_replay_all_visibility(client: TestClient):
             if line.startswith("data: "):
                 sse_lines.append(line[6:])
     assert sse_lines == replay_lines
+
+
+def test_replay_default_visibility_is_public(client: TestClient):
+    created = _create_match(client, seed=654)
+    match_id = created["match_id"]
+    _run_match_sync(client, match_id)
+
+    default_response = client.get(f"/matches/{match_id}/replay")
+    explicit_public = client.get(f"/matches/{match_id}/replay?visibility=public")
+
+    assert default_response.status_code == 200
+    assert explicit_public.status_code == 200
+    assert default_response.text == explicit_public.text
+
+
+def test_visibility_all_requires_admin(client: TestClient):
+    created = _create_match(client, seed=655)
+    match_id = created["match_id"]
+    _run_match_sync(client, match_id)
+
+    replay_response = client.get(f"/matches/{match_id}/replay?visibility=all")
+    events_response = client.get(f"/matches/{match_id}/events?visibility=all")
+    recap_response = client.get(f"/matches/{match_id}/recap?visibility=all")
+
+    assert replay_response.status_code == 403
+    assert events_response.status_code == 403
+    assert recap_response.status_code == 403
 
 
 class MutatingObservationAgent:

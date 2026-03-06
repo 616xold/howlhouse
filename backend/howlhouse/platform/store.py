@@ -835,6 +835,12 @@ class MatchStore:
     ) -> AgentRecord:
         now = utc_now_iso()
         with self._lock, self._write_guard_locked():
+            existing = self._exec(
+                "SELECT * FROM agents WHERE agent_id = ?",
+                (agent_id,),
+            ).fetchone()
+            if existing is not None:
+                return self._agent_row_to_record(existing)
             self._exec(
                 """
                 INSERT INTO agents (
@@ -842,16 +848,6 @@ class MatchStore:
                   package_path, entrypoint, created_at, updated_at,
                   created_by_identity_id, created_by_ip
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(agent_id) DO UPDATE SET
-                  name = excluded.name,
-                  version = excluded.version,
-                  runtime_type = excluded.runtime_type,
-                  strategy_text = excluded.strategy_text,
-                  package_path = excluded.package_path,
-                  entrypoint = excluded.entrypoint,
-                  created_by_identity_id = COALESCE(agents.created_by_identity_id, excluded.created_by_identity_id),
-                  created_by_ip = COALESCE(agents.created_by_ip, excluded.created_by_ip),
-                  updated_at = excluded.updated_at
                 """,
                 (
                     agent_id,

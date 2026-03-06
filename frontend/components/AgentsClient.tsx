@@ -6,6 +6,9 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { apiUrl, buildAuthHeaders, fetchJson } from "../lib/api";
 import type { AgentRecord } from "../lib/types";
 
+const ENABLE_UNSAFE_LOCAL_AGENT_RUNTIME =
+  process.env.NEXT_PUBLIC_ENABLE_UNSAFE_LOCAL_AGENT_RUNTIME === "true";
+
 async function readError(response: Response): Promise<string> {
   try {
     const body = await response.json();
@@ -84,6 +87,9 @@ export function AgentsClient() {
         </p>
         <h1>Agent Registry</h1>
         <p className="muted">Upload ZIP packages containing agent.py and AGENT.md.</p>
+        {!ENABLE_UNSAFE_LOCAL_AGENT_RUNTIME ? (
+          <p className="muted">`local_py_v1` is hidden outside explicit dev mode.</p>
+        ) : null}
 
         <form className="create-form" onSubmit={submit}>
           <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Name" />
@@ -97,7 +103,9 @@ export function AgentsClient() {
             onChange={(event) => setRuntimeType(event.target.value as "docker_py_v1" | "local_py_v1")}
           >
             <option value="docker_py_v1">docker_py_v1</option>
-            <option value="local_py_v1">local_py_v1</option>
+            {ENABLE_UNSAFE_LOCAL_AGENT_RUNTIME ? (
+              <option value="local_py_v1">local_py_v1</option>
+            ) : null}
           </select>
           <input
             type="file"

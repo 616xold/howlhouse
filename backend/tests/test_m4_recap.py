@@ -8,12 +8,14 @@ from howlhouse.api.app import create_app
 from howlhouse.core.config import Settings
 from howlhouse.recap import generate_recap, generate_share_cards
 
+ADMIN_HEADERS = {"X-HowlHouse-Admin": "ops-secret"}
+
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     db_path = tmp_path / "howlhouse.db"
-    settings = Settings(env="test", database_url=f"sqlite:///{db_path}")
+    settings = Settings(env="test", database_url=f"sqlite:///{db_path}", admin_tokens="ops-secret")
     app = create_app(settings)
     with TestClient(app) as test_client:
         yield test_client
@@ -30,7 +32,9 @@ def _create_and_run_sync(client: TestClient, seed: int = 123) -> str:
 
 
 def _read_events(client: TestClient, match_id: str) -> list[dict]:
-    replay_response = client.get(f"/matches/{match_id}/replay?visibility=all")
+    replay_response = client.get(
+        f"/matches/{match_id}/replay?visibility=all", headers=ADMIN_HEADERS
+    )
     assert replay_response.status_code == 200
     return [json.loads(line) for line in replay_response.text.splitlines() if line.strip()]
 
@@ -46,7 +50,7 @@ def test_recap_and_share_card_endpoints(client: TestClient):
     assert len(public_payload["clips"]) >= 3
     assert "confessional_highlights" not in public_payload
 
-    recap_all = client.get(f"/matches/{match_id}/recap?visibility=all")
+    recap_all = client.get(f"/matches/{match_id}/recap?visibility=all", headers=ADMIN_HEADERS)
     assert recap_all.status_code == 200
     all_payload = recap_all.json()
     assert "confessional_highlights" in all_payload

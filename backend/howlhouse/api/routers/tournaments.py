@@ -21,6 +21,7 @@ from howlhouse.platform.access_control import (
     require_mutation_access,
 )
 from howlhouse.platform.observability import increment_tournaments_run
+from howlhouse.platform.runtime_policy import ensure_agent_runtime_allowed
 from howlhouse.platform.store import TournamentRecord
 
 router = APIRouter(prefix="/tournaments", tags=["tournaments"])
@@ -36,12 +37,11 @@ class CreateTournamentRequest(BaseModel):
 
 
 def _tournament_to_dto(record: TournamentRecord, *, admin_view: bool) -> dict[str, Any]:
-    return {
+    payload = {
         "tournament_id": record.tournament_id,
         "season_id": record.season_id,
         "name": record.name,
         "seed": record.seed,
-        "created_by_identity_id": record.created_by_identity_id,
         "created_by_ip": record.created_by_ip if admin_view else None,
         "hidden_at": record.hidden_at,
         "hidden_reason": record.hidden_reason,
@@ -56,6 +56,9 @@ def _tournament_to_dto(record: TournamentRecord, *, admin_view: bool) -> dict[st
             "run": f"/tournaments/{record.tournament_id}/run",
         },
     }
+    if admin_view:
+        payload["created_by_identity_id"] = record.created_by_identity_id
+    return payload
 
 
 def _job_to_dto(job) -> dict[str, Any]:
@@ -82,6 +85,7 @@ def _get_tournament_or_404(store, tournament_id: str) -> TournamentRecord:
 @router.post("")
 def create_tournament(body: CreateTournamentRequest, request: Request) -> dict[str, Any]:
     store = request.app.state.store
+    settings = request.app.state.settings
     actor = require_mutation_access(request, action=ACTION_TOURNAMENT_CREATE)
     season = store.get_season(body.season_id)
     if season is None:
@@ -100,6 +104,25 @@ def create_tournament(body: CreateTournamentRequest, request: Request) -> dict[s
         raise HTTPException(
             status_code=422, detail=f"Unknown participant agent_ids: {', '.join(missing)}"
         )
+    hidden = [
+        agent_id
+        for agent_id in deduped_participants
+        if (agent_record := store.get_agent(agent_id)) is not None
+        and agent_record.hidden_at is not None
+    ]
+    if hidden:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Hidden agents cannot be used in tournaments: {', '.join(hidden)}",
+        )
+    for agent_id in deduped_participants:
+        agent_record = store.get_agent(agent_id)
+        if agent_record is None:
+            continue
+        try:
+            ensure_agent_runtime_allowed(settings, agent_record.runtime_type)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     tournament_id = derive_tournament_id(
         season_id=season.season_id,

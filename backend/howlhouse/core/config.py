@@ -35,6 +35,7 @@ class Settings(BaseSettings):
 
     sandbox_docker_image: str = "python:3.11-slim"
     sandbox_allow_local_fallback: bool = True
+    enable_unsafe_local_agent_runtime: bool = False
     sandbox_act_timeout_ms: int = 750
     sandbox_max_observation_bytes: int = 65_536
     sandbox_max_action_bytes: int = 16_384
@@ -61,6 +62,8 @@ class Settings(BaseSettings):
     identity_rate_limit_max_failures: int = 20
     trust_proxy_headers: bool = False
     trusted_proxy_hops: int = 1
+    trusted_proxy_cidrs: str = ""
+    identity_verify_host_allowlist: str = ""
 
     # Access control and quotas (M12)
     auth_mode: str = "open"  # open | verified | admin
@@ -72,6 +75,8 @@ class Settings(BaseSettings):
     quota_match_run_window_s: int = 0
     quota_agent_upload_max: int = 0
     quota_agent_upload_window_s: int = 0
+    quota_prediction_mutation_max: int = 0
+    quota_prediction_mutation_window_s: int = 0
     quota_tournament_create_max: int = 0
     quota_tournament_create_window_s: int = 0
     quota_tournament_run_max: int = 0
@@ -87,6 +92,7 @@ class Settings(BaseSettings):
     # Optional outbound recap distribution (M7)
     distribution_enabled: bool = False
     distribution_post_url: str | None = None
+    distribution_post_host_allowlist: str = ""
 
     # Metrics + tracing (M8)
     metrics_enabled: bool = False
@@ -95,6 +101,7 @@ class Settings(BaseSettings):
     tracing_service_name: str = "howlhouse"
     tracing_otlp_endpoint: str = ""
     tracing_sample_rate: float = 1.0
+    event_bus_history_limit: int = 512
 
 
 settings = Settings()

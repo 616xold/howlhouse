@@ -88,12 +88,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Prepare .env for compose validation
+        run: cp .env.example .env
       - name: Build backend image
         run: docker build -t howlhouse-backend ./backend
       - name: Build frontend image
         run: docker build -t howlhouse-frontend ./frontend
       - name: Validate compose config
-        run: docker compose config
+        run: |
+          docker compose --env-file .env -f docker-compose.yml config
+          docker compose --env-file .env -f docker-compose.yml -f docker-compose.prod.yml config
 
   docker-optional:
     runs-on: ubuntu-latest
@@ -116,6 +120,12 @@ jobs:
           HOWLHOUSE_RUN_DOCKER_TESTS=1 pytest -q -m docker
           status=$?
           set -e
-          if [ "$status" -ne 0 ] && [ "$status" -ne 5 ]; then
+          if [ "$status" -eq 5 ]; then
+            echo "No docker-marked tests were collected"
+            exit 0
+          fi
+          if [ "$status" -ne 0 ]; then
+            echo "Docker-marked tests failed"
             exit "$status"
           fi
+          echo "Docker-marked tests passed"

@@ -5,3 +5,8 @@ __pycache__
 .ruff_cache
 howlhouse.db
 replays
+.env
+.env.*
+!.env.example
+.git
+tests

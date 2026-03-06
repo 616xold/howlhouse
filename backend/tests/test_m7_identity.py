@@ -160,3 +160,58 @@ def test_publish_recap_with_verified_identity(client_identity_and_distribution_e
     assert call["match_id"] == match_id
     assert call["identity"].identity_id == "viewer_123"
     assert call["recap"]["match_id"] == match_id
+
+
+def test_production_requires_https_for_identity_and_distribution_urls(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    db_path = tmp_path / "howlhouse.db"
+
+    with pytest.raises(ValueError, match="HOWLHOUSE_IDENTITY_VERIFY_URL must use https"):
+        create_app(
+            Settings(
+                env="production",
+                database_url=f"sqlite:///{db_path}",
+                identity_enabled=True,
+                identity_verify_url="http://identity.example/verify",
+            )
+        )
+
+    with pytest.raises(ValueError, match="HOWLHOUSE_DISTRIBUTION_POST_URL must use https"):
+        create_app(
+            Settings(
+                env="production",
+                database_url=f"sqlite:///{db_path}",
+                distribution_enabled=True,
+                distribution_post_url="http://publisher.example/post",
+            )
+        )
+
+
+def test_outbound_hostname_allowlists_are_enforced(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    db_path = tmp_path / "howlhouse.db"
+
+    with pytest.raises(ValueError, match="not in the configured hostname allowlist"):
+        create_app(
+            Settings(
+                env="production",
+                database_url=f"sqlite:///{db_path}",
+                identity_enabled=True,
+                identity_verify_url="https://identity.example/verify",
+                identity_verify_host_allowlist="other.example",
+            )
+        )
+
+    app = create_app(
+        Settings(
+            env="production",
+            database_url=f"sqlite:///{db_path}",
+            identity_enabled=True,
+            identity_verify_url="https://identity.example/verify",
+            identity_verify_host_allowlist="identity.example",
+            distribution_enabled=True,
+            distribution_post_url="https://publisher.example/post",
+            distribution_post_host_allowlist="publisher.example",
+        )
+    )
+    assert app is not None

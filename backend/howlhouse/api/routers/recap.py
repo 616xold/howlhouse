@@ -52,6 +52,14 @@ def _filtered_recap(recap: dict[str, Any], visibility: str) -> dict[str, Any]:
     return filtered
 
 
+def _resolved_recap_visibility(
+    request: Request, *, visibility: Literal["public", "spoilers", "all"]
+) -> Literal["public", "spoilers", "all"]:
+    if visibility == "all" and not is_admin_request(request):
+        raise HTTPException(status_code=403, detail="visibility=all requires admin access")
+    return visibility
+
+
 @router.get("/recap")
 def get_recap(
     match_id: str,
@@ -59,6 +67,7 @@ def get_recap(
     visibility: Literal["public", "spoilers", "all"] = Query(default="public"),
 ) -> dict[str, Any]:
     match = _get_match_or_404(request, match_id)
+    visibility = _resolved_recap_visibility(request, visibility=visibility)
     recap_record = _get_recap_or_409(request, match)
     return _filtered_recap(recap_record.recap, visibility)
 

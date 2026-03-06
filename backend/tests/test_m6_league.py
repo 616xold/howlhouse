@@ -11,6 +11,8 @@ from howlhouse.core.config import Settings
 from howlhouse.engine.domain.models import GameConfig
 from howlhouse.league.tournament import derive_game_seed, derive_tournament_match_id
 
+ADMIN_HEADERS = {"X-HowlHouse-Admin": "ops-secret"}
+
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
@@ -21,6 +23,7 @@ def client(tmp_path, monkeypatch):
         database_url=f"sqlite:///{db_path}",
         data_dir=str(tmp_path / "data"),
         sandbox_allow_local_fallback=True,
+        admin_tokens="ops-secret",
     )
     app = create_app(settings)
     with TestClient(app) as test_client:
@@ -182,7 +185,9 @@ def test_tournament_end_to_end(client: TestClient):
     match_response = client.get(f"/matches/{match_id}")
     assert match_response.status_code == 200, match_response.text
 
-    replay_response = client.get(f"/matches/{match_id}/replay?visibility=all")
+    replay_response = client.get(
+        f"/matches/{match_id}/replay?visibility=all", headers=ADMIN_HEADERS
+    )
     assert replay_response.status_code == 200, replay_response.text
     events = [json.loads(line) for line in replay_response.text.splitlines() if line.strip()]
     assert any(event["type"] == "match_ended" for event in events)

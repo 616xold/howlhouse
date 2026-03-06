@@ -33,7 +33,9 @@ from howlhouse.platform.observability import (
     install_request_observability_middleware,
     setup_tracing,
 )
+from howlhouse.platform.outbound_policy import validate_outbound_url
 from howlhouse.platform.runner import MatchRunner
+from howlhouse.platform.runtime_policy import is_production_like_env
 from howlhouse.platform.sandbox import docker_available
 from howlhouse.platform.store import MatchStore
 
@@ -46,7 +48,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     store = MatchStore(resolved_settings.database_url)
     blob_store = create_blob_store(resolved_settings)
-    bus = EventBus()
+    bus = EventBus(history_limit=max(1, int(resolved_settings.event_bus_history_limit)))
     runner = MatchRunner(
         settings=resolved_settings,
         store=store,
@@ -64,6 +66,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     if resolved_settings.identity_enabled:
         if not resolved_settings.identity_verify_url:
             raise ValueError("HOWLHOUSE_IDENTITY_VERIFY_URL is required when identity_enabled=true")
+        validate_outbound_url(
+            resolved_settings.identity_verify_url,
+            purpose="HOWLHOUSE_IDENTITY_VERIFY_URL",
+            env=resolved_settings.env,
+            hostname_allowlist=resolved_settings.identity_verify_host_allowlist,
+        )
         identity_verifier = HttpIdentityVerifier(resolved_settings.identity_verify_url)
     else:
         identity_verifier = NoOpIdentityVerifier()
@@ -73,13 +81,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise ValueError(
                 "HOWLHOUSE_DISTRIBUTION_POST_URL is required when distribution_enabled=true"
             )
+        validate_outbound_url(
+            resolved_settings.distribution_post_url,
+            purpose="HOWLHOUSE_DISTRIBUTION_POST_URL",
+            env=resolved_settings.env,
+            hostname_allowlist=resolved_settings.distribution_post_host_allowlist,
+        )
         publisher = HttpRecapPublisher(resolved_settings.distribution_post_url)
     else:
         publisher = NoOpRecapPublisher()
 
-    if resolved_settings.env.strip().lower() == "production" and not docker_available():
+    if is_production_like_env(resolved_settings.env) and not docker_available():
         logger.warning(
-            "docker_unavailable_in_production",
+            "docker_unavailable_in_production_like_env",
             extra={
                 "reason": "registered_docker_agents_will_fail",
             },

@@ -47,12 +47,6 @@ export function AgentDetailClient({ agentId }: AgentDetailClientProps) {
             <p>
               <strong>Runtime:</strong> {agent.runtime_type}
             </p>
-            <p>
-              <strong>Entrypoint:</strong> {agent.entrypoint ?? "-"}
-            </p>
-            <p>
-              <strong>Package Path:</strong> {agent.package_path ?? "-"}
-            </p>
             <h3>HowlHouse Strategy</h3>
             <pre className="narration-block">{agent.strategy_text ?? ""}</pre>
           </div>

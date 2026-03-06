@@ -173,10 +173,12 @@ def test_ownership_fields_populated_when_identity_present(tmp_path, monkeypatch)
         auth_mode="verified",
         identity_enabled=True,
         identity_verify_url="http://127.0.0.1:9/verify",
+        admin_tokens="ops-secret",
     )
 
     with _make_client(settings, use_verifier=True) as client:
         headers = {"Authorization": "Bearer good-owner"}
+        admin_headers = {"X-HowlHouse-Admin": "ops-secret"}
 
         agent_a = client.post(
             "/agents",
@@ -194,7 +196,7 @@ def test_ownership_fields_populated_when_identity_present(tmp_path, monkeypatch)
         assert agent_b.status_code == 200, agent_b.text
         agent_a_payload = agent_a.json()
         agent_b_payload = agent_b.json()
-        assert agent_a_payload["created_by_identity_id"] == "owner"
+        assert "created_by_identity_id" not in agent_a_payload
         assert agent_a_payload["created_by_ip"] is None
 
         match = client.post(
@@ -202,7 +204,7 @@ def test_ownership_fields_populated_when_identity_present(tmp_path, monkeypatch)
         )
         assert match.status_code == 200, match.text
         match_payload = match.json()
-        assert match_payload["created_by_identity_id"] == "owner"
+        assert "created_by_identity_id" not in match_payload
         assert match_payload["created_by_ip"] is None
 
         season = client.post(
@@ -228,5 +230,18 @@ def test_ownership_fields_populated_when_identity_present(tmp_path, monkeypatch)
         )
         assert tournament.status_code == 200, tournament.text
         tournament_payload = tournament.json()
-        assert tournament_payload["created_by_identity_id"] == "owner"
+        assert "created_by_identity_id" not in tournament_payload
         assert tournament_payload["created_by_ip"] is None
+
+        agent_a_admin = client.get(f"/agents/{agent_a_payload['agent_id']}", headers=admin_headers)
+        match_admin = client.get(f"/matches/{match_payload['match_id']}", headers=admin_headers)
+        tournament_admin = client.get(
+            f"/tournaments/{tournament_payload['tournament_id']}",
+            headers=admin_headers,
+        )
+        assert agent_a_admin.status_code == 200, agent_a_admin.text
+        assert match_admin.status_code == 200, match_admin.text
+        assert tournament_admin.status_code == 200, tournament_admin.text
+        assert agent_a_admin.json()["created_by_identity_id"] == "owner"
+        assert match_admin.json()["created_by_identity_id"] == "owner"
+        assert tournament_admin.json()["created_by_identity_id"] == "owner"

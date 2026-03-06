@@ -8,6 +8,8 @@ from fastapi.testclient import TestClient
 from howlhouse.api.app import create_app
 from howlhouse.core.config import Settings
 
+ADMIN_HEADERS = {"X-HowlHouse-Admin": "ops-secret"}
+
 
 def test_replay_and_share_card_fallback_to_blob_store(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
@@ -17,6 +19,7 @@ def test_replay_and_share_card_fallback_to_blob_store(tmp_path, monkeypatch):
         database_url=f"sqlite:///{db_path}",
         blob_store="local",
         blob_base_dir=str(tmp_path / "blob"),
+        admin_tokens="ops-secret",
     )
     app = create_app(settings)
 
@@ -25,7 +28,7 @@ def test_replay_and_share_card_fallback_to_blob_store(tmp_path, monkeypatch):
         assert created.status_code == 200, created.text
         match_id = created.json()["match_id"]
 
-        ran = client.post(f"/matches/{match_id}/run?sync=true")
+        ran = client.post(f"/matches/{match_id}/run?sync=true", headers=ADMIN_HEADERS)
         assert ran.status_code == 200, ran.text
         assert ran.json()["status"] == "finished"
 
@@ -45,7 +48,7 @@ def test_replay_and_share_card_fallback_to_blob_store(tmp_path, monkeypatch):
         public_card_path.unlink()
         spoilers_card_path.unlink()
 
-        replay = client.get(f"/matches/{match_id}/replay?visibility=all")
+        replay = client.get(f"/matches/{match_id}/replay?visibility=all", headers=ADMIN_HEADERS)
         assert replay.status_code == 200, replay.text
         events = [json.loads(line) for line in replay.text.splitlines() if line.strip()]
         assert any(event["type"] == "match_ended" for event in events)

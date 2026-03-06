@@ -141,7 +141,10 @@ Supports:
 - spoiler toggle:
   - mystery: `visibility=public`
   - dramatic irony: `visibility=spoilers`
-  - optional director's cut: `visibility=all`
+
+Operational note:
+
+- `visibility=all` remains available only for admin/ops use and is not exposed as a normal spectator control in the default frontend.
 
 Transcript rendering requirements:
 

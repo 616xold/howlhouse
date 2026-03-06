@@ -290,13 +290,6 @@ export function MatchViewerClient({ matchId }: MatchViewerClientProps) {
               >
                 Dramatic Irony
               </button>
-              <button
-                type="button"
-                className={visibility === "all" ? "active-btn" : "secondary-btn"}
-                onClick={() => setVisibility("all")}
-              >
-                Director&apos;s Cut
-              </button>
             </div>
             {canRun ? (
               <button type="button" onClick={runMatch} disabled={runningRequest}>
@@ -388,18 +381,6 @@ export function MatchViewerClient({ matchId }: MatchViewerClientProps) {
                   className={withHighlightClass("event-row muted", event.id, highlightedEventId)}
                 >
                   Roles assigned (spoiler data loaded).
-                </li>
-              );
-            }
-
-            if (visibility === "all") {
-              return (
-                <li
-                  id={event.id}
-                  key={event.id}
-                  className={withHighlightClass("event-row muted", event.id, highlightedEventId)}
-                >
-                  [{event.visibility}] {event.type}
                 </li>
               );
             }

@@ -12,8 +12,9 @@ class _MatchChannel:
 
 
 class EventBus:
-    def __init__(self):
+    def __init__(self, *, history_limit: int = 512):
         self._channels: dict[str, _MatchChannel] = {}
+        self._history_limit = max(1, int(history_limit))
 
     def subscribe(self, match_id: str) -> tuple[list[str], asyncio.Queue[str | None]]:
         channel = self._channels.setdefault(match_id, _MatchChannel())
@@ -28,12 +29,16 @@ class EventBus:
         if channel is None:
             return
         channel.subscribers.discard(queue)
+        if channel.closed and not channel.subscribers:
+            self._channels.pop(match_id, None)
 
     def publish(self, match_id: str, event_json: str) -> None:
         channel = self._channels.setdefault(match_id, _MatchChannel())
         if channel.closed:
             return
         channel.history.append(event_json)
+        if len(channel.history) > self._history_limit:
+            del channel.history[: len(channel.history) - self._history_limit]
         for queue in list(channel.subscribers):
             queue.put_nowait(event_json)
 

@@ -1,4 +1,4 @@
-export type VisibilityMode = "public" | "spoilers" | "all";
+export type VisibilityMode = "public" | "spoilers";
 export type MatchEventMode = "live" | "replay";
 
 export interface ReplayEvent {
@@ -20,7 +20,7 @@ export interface MatchRecord {
   names: Record<string, string>;
   season_id: string | null;
   tournament_id: string | null;
-  created_by_identity_id: string | null;
+  created_by_identity_id?: string | null;
   created_by_ip: string | null;
   hidden_at: string | null;
   hidden_reason: string | null;
@@ -28,9 +28,12 @@ export interface MatchRecord {
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
-  replay_path: string | null;
+  replay_path?: string | null;
+  replay_key?: string | null;
+  replay_uri?: string | null;
   winner: string | null;
   error: string | null;
+  postprocess_error?: string | null;
   links: Record<string, string>;
 }
 

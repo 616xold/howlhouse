@@ -2,3 +2,7 @@ node_modules
 .next
 npm-debug.log*
 *.tsbuildinfo
+.env
+.env.*
+!.env.local.example
+.git

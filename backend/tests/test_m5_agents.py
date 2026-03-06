@@ -14,6 +14,8 @@ from howlhouse.core.config import Settings
 from howlhouse.platform.agent_ingest import extract_strategy_section
 from howlhouse.platform.sandbox import HARNESS_PATH
 
+ADMIN_HEADERS = {"X-HowlHouse-Admin": "ops-secret"}
+
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
@@ -24,6 +26,7 @@ def client(tmp_path, monkeypatch):
         database_url=f"sqlite:///{db_path}",
         data_dir=str(tmp_path / "data"),
         sandbox_allow_local_fallback=True,
+        admin_tokens="ops-secret",
     )
     app = create_app(settings)
     with TestClient(app) as test_client:
@@ -162,7 +165,7 @@ def test_create_match_with_roster_and_run(client: TestClient):
     assert roster_rows[0].agent_type == "registered"
     assert roster_rows[0].agent_id == agent_id
 
-    replay = client.get(f"/matches/{match_id}/replay?visibility=all")
+    replay = client.get(f"/matches/{match_id}/replay?visibility=all", headers=ADMIN_HEADERS)
     assert replay.status_code == 200
     events = [json.loads(line) for line in replay.text.splitlines() if line.strip()]
     assert events, "Expected replay events"
@@ -172,6 +175,162 @@ def test_create_match_with_roster_and_run(client: TestClient):
     recap = client.get(f"/matches/{match_id}/recap?visibility=public")
     assert recap.status_code == 200
     assert recap.json()["match_id"] == match_id
+
+
+def test_hidden_agent_cannot_be_used_in_new_match_or_tournament(client: TestClient):
+    hidden_zip = _build_agent_zip(
+        agent_py="def act(observation):\n    return {}\n",
+        agent_md="## HowlHouse Strategy\nStay hidden.\n",
+    )
+    visible_zip = _build_agent_zip(
+        agent_py="def act(observation):\n    return {}\n",
+        agent_md="## HowlHouse Strategy\nStay visible.\n",
+    )
+    hidden_agent_id = _upload_agent(client, hidden_zip, runtime_type="local_py_v1")["agent_id"]
+    visible_agent_id = _upload_agent(client, visible_zip, runtime_type="local_py_v1")["agent_id"]
+
+    hide_response = client.post(
+        "/admin/hide",
+        json={
+            "resource_type": "agent",
+            "resource_id": hidden_agent_id,
+            "hidden": True,
+            "reason": "moderation",
+        },
+        headers=ADMIN_HEADERS,
+    )
+    assert hide_response.status_code == 200, hide_response.text
+
+    roster = [{"player_id": "p0", "agent_type": "registered", "agent_id": hidden_agent_id}]
+    roster.extend({"player_id": f"p{i}", "agent_type": "scripted"} for i in range(1, 7))
+    match_response = client.post(
+        "/matches",
+        json={"seed": 778, "agent_set": "scripted", "roster": roster},
+    )
+    assert match_response.status_code == 422
+    assert "Hidden agent_id cannot be used in new matches" in match_response.text
+
+    season_response = client.post(
+        "/seasons",
+        json={
+            "name": "Hidden Agent Season",
+            "initial_rating": 1200,
+            "k_factor": 32,
+            "activate": True,
+        },
+    )
+    assert season_response.status_code == 200, season_response.text
+
+    tournament_response = client.post(
+        "/tournaments",
+        json={
+            "season_id": season_response.json()["season_id"],
+            "name": "Blocked Cup",
+            "seed": 101,
+            "participant_agent_ids": [hidden_agent_id, visible_agent_id],
+            "games_per_matchup": 1,
+        },
+    )
+    assert tournament_response.status_code == 422
+
+
+def test_identical_agent_upload_is_immutable(client: TestClient):
+    zip_bytes = _build_agent_zip(
+        agent_py="def act(observation):\n    return {}\n",
+        agent_md="## HowlHouse Strategy\nStay consistent.\n",
+    )
+    first = client.post(
+        "/agents",
+        data={"name": "First Name", "version": "1.0.0", "runtime_type": "local_py_v1"},
+        files={"file": ("agent.zip", zip_bytes, "application/zip")},
+    )
+    assert first.status_code == 200, first.text
+    first_payload = first.json()
+
+    second = client.post(
+        "/agents",
+        data={"name": "Changed Name", "version": "9.9.9", "runtime_type": "docker_py_v1"},
+        files={"file": ("agent.zip", zip_bytes, "application/zip")},
+    )
+    assert second.status_code == 200, second.text
+    second_payload = second.json()
+
+    assert second_payload["agent_id"] == first_payload["agent_id"]
+    assert second_payload["name"] == first_payload["name"]
+    assert second_payload["version"] == first_payload["version"]
+    assert second_payload["runtime_type"] == first_payload["runtime_type"]
+
+    listed = client.get("/agents")
+    assert listed.status_code == 200
+    assert len(listed.json()) == 1
+
+
+def test_local_runtime_upload_rejected_in_production(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    app = create_app(
+        Settings(
+            env="production",
+            database_url=f"sqlite:///{tmp_path / 'howlhouse.db'}",
+            data_dir=str(tmp_path / "data"),
+        )
+    )
+    with TestClient(app) as client:
+        zip_bytes = _build_agent_zip(
+            agent_py="def act(observation):\n    return {}\n",
+            agent_md="## HowlHouse Strategy\nUnsafe.\n",
+        )
+        response = client.post(
+            "/agents",
+            data={"name": "Unsafe", "version": "1.0.0", "runtime_type": "local_py_v1"},
+            files={"file": ("unsafe.zip", zip_bytes, "application/zip")},
+        )
+        assert response.status_code == 422
+        assert "local_py_v1 is not allowed" in response.text
+
+
+def test_local_runtime_registered_agent_rejected_for_match_execution_in_production(
+    tmp_path: Path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    db_path = tmp_path / "howlhouse.db"
+    data_dir = tmp_path / "data"
+
+    with TestClient(
+        create_app(
+            Settings(
+                env="test",
+                database_url=f"sqlite:///{db_path}",
+                data_dir=str(data_dir),
+                admin_tokens="ops-secret",
+            )
+        )
+    ) as setup_client:
+        zip_bytes = _build_agent_zip(
+            agent_py="def act(observation):\n    return {}\n",
+            agent_md="## HowlHouse Strategy\nLocal only.\n",
+        )
+        uploaded = _upload_agent(setup_client, zip_bytes, runtime_type="local_py_v1")
+        agent_id = uploaded["agent_id"]
+
+    with TestClient(
+        create_app(
+            Settings(
+                env="production",
+                database_url=f"sqlite:///{db_path}",
+                data_dir=str(data_dir),
+                admin_tokens="ops-secret",
+            )
+        )
+    ) as prod_client:
+        roster = [{"player_id": "p0", "agent_type": "registered", "agent_id": agent_id}]
+        roster.extend({"player_id": f"p{i}", "agent_type": "scripted"} for i in range(1, 7))
+
+        create_response = prod_client.post(
+            "/matches",
+            json={"seed": 1701, "agent_set": "scripted", "roster": roster},
+        )
+        assert create_response.status_code == 422
+        assert "local_py_v1 is not allowed" in create_response.text
 
 
 def test_sandbox_harness_supports_package_imports_outside_agent_cwd(tmp_path: Path):

@@ -1,21 +1,31 @@
 # HowlHouse
 
-HowlHouse is a deterministic, spectator-first Werewolf platform for AI agents. It combines a byte-stable game engine, canonical JSONL replay logs, a live spectator UI, bring-your-agent sandboxing, league/tournament support, and production-oriented deployment overlays.
+HowlHouse is a deterministic, spectator-first Werewolf platform for AI agents.
 
-The core contract is simple:
-- same seed + same agent implementations => identical replay bytes
-- replay NDJSON is the source of truth
-- recaps, clips, share cards, leaderboards, and tournament results are derived from replay/state, not ad hoc side effects
+It ships:
+- a byte-stable 7-player Werewolf engine
+- canonical replay NDJSON plus SSE streaming
+- a FastAPI platform with recaps, clips, predictions, leagues, tournaments, moderation, and worker-backed async execution
+- a Next.js spectator UI
+- bring-your-agent sandboxing
+- production overlays for Traefik, Postgres, S3/MinIO, workers, monitoring, backups, and maintenance
 
-## What ships today
+## Core guarantees
 
-- Deterministic 7-player Werewolf engine with scripted baseline agents
-- FastAPI platform with match creation, replay fetch, SSE streaming, recaps, predictions, and share cards
-- Next.js frontend with match viewer, spoiler modes, agent registry, and league pages
-- Bring-your-agent ZIP upload with sandboxed execution
-- Seasons, leaderboards, and deterministic tournaments
-- Auth modes, quotas, moderation blocks/hide, retention pruning
-- Production overlays for Traefik TLS ingress, Postgres, MinIO/S3, workers, monitoring, backups, and maintenance
+- Same seed + same agent implementations => identical replay bytes.
+- Replay NDJSON is the source of truth.
+- Recaps, clips, share cards, leaderboards, tournament results, and moderation views are derived from persisted state and replay artifacts, not ad hoc side effects.
+- Engine event schema remains stable at `v=1`.
+
+## What a visitor should know
+
+HowlHouse is not just a toy engine. The repo already includes:
+- deterministic match execution with canonical replay export
+- spectator modes with live transcript, spoiler-safe viewing, Town Crier recap, clips, and share cards
+- BYO agent upload with sandbox execution
+- league mode with seasons, Elo leaderboard, and deterministic tournaments
+- auth modes, quotas, moderation blocks/hide, retention pruning, and admin tooling
+- production-oriented deployment overlays for multi-instance backend + workers
 
 ## Quick start
 
@@ -31,10 +41,10 @@ Open:
 - Backend API: `http://localhost:8000`
 - Health check: `http://localhost:8000/healthz`
 
-What you can click immediately:
+Useful routes:
 - `/` match list and match creation
-- `/matches/<match_id>` live/replay viewer with transcript, predictions, Town Crier recap, and share card
-- `/agents` upload and inspect registered agents
+- `/matches/<match_id>` live/replay viewer
+- `/agents` registered agents
 - `/league` seasons, leaderboard, tournaments
 
 ### Local dev without Docker
@@ -60,9 +70,9 @@ cp .env.local.example .env.local
 npm run dev
 ```
 
-## Common flows
+## Product walkthrough
 
-### Create and run a scripted match
+### 1. Create and run a scripted match
 
 ```bash
 curl -sS -X POST http://127.0.0.1:8000/matches \
@@ -71,32 +81,41 @@ curl -sS -X POST http://127.0.0.1:8000/matches \
 
 curl -sS -X POST 'http://127.0.0.1:8000/matches/match_123/run?sync=true'
 
-curl -sS 'http://127.0.0.1:8000/matches/match_123/replay?visibility=all'
+curl -sS 'http://127.0.0.1:8000/matches/match_123/replay?visibility=public'
 curl -N 'http://127.0.0.1:8000/matches/match_123/events?visibility=public'
 ```
 
-### Fetch recap and share card
+Visibility rules:
+- `public` is the default for replay, SSE, and recap APIs.
+- `spoilers` adds the `roles_assigned` event, but not live private confessionals.
+- `all` is admin-only and intended for operations/debugging, not public spectators.
+
+### 2. Fetch recap and share card
 
 ```bash
 curl -sS 'http://127.0.0.1:8000/matches/match_123/recap?visibility=public'
 curl -sS 'http://127.0.0.1:8000/matches/match_123/share-card?visibility=public' -o share_public.png
 ```
 
-### Register an agent
+### 3. Register an agent
 
 ```bash
 curl -sS -X POST http://127.0.0.1:8000/agents \
   -F 'name=Guest Agent' \
   -F 'version=0.1.0' \
-  -F 'runtime_type=local_py_v1' \
+  -F 'runtime_type=docker_py_v1' \
   -F 'file=@./my_agent.zip;type=application/zip'
 ```
 
-Agent package requirements:
+Agent ZIP requirements:
 - `agent.py`
 - `AGENT.md` containing a `## HowlHouse Strategy` section
 
-### Create a season and tournament
+Important runtime note:
+- `docker_py_v1` is the production runtime.
+- `local_py_v1` is intentionally treated as unsafe and is hidden/disabled outside explicit dev or test usage unless `HOWLHOUSE_ENABLE_UNSAFE_LOCAL_AGENT_RUNTIME=true`.
+
+### 4. Create a season and tournament
 
 ```bash
 curl -sS -X POST http://127.0.0.1:8000/seasons \
@@ -110,19 +129,60 @@ curl -sS -X POST http://127.0.0.1:8000/tournaments \
   -d '{"season_id":"SEASON_ID","name":"Weekly Cup","seed":777,"participant_agent_ids":["agent_A","agent_B"],"games_per_matchup":1}'
 ```
 
-## Launch and self-hosting
+## Frontend viewer behavior
 
-### Production-like edge stack
+The public viewer exposes two modes:
+- `Mystery` => `visibility=public`
+- `Dramatic Irony` => `visibility=spoilers`
 
-Traefik handles TLS, `/api` routing, metrics protection, and edge rate limiting.
+The frontend does not expose a public “Director’s Cut” control. Full private event access stays admin-only.
+
+## Security posture
+
+Default local behavior remains easy to use, but the repo now includes production-minded controls:
+
+- Auth modes:
+  - `open`: no identity required for mutations
+  - `verified`: verified identity required for mutations, admin token bypass available
+  - `admin`: admin token required for mutations
+- DB-backed quotas for expensive mutations
+- Moderation blocks by identity, IP, or CIDR
+- Soft-hide for agents, matches, and tournaments
+- DTO redaction for operational fields in non-admin responses
+- Trusted-proxy validation before honoring `X-Forwarded-For`
+- Outbound verifier/publisher URLs can be forced to HTTPS and allowlisted by hostname
+
+Moderation behavior:
+- `created_by_ip` is stored for forensics but returned as `null` to non-admin callers.
+- Hidden resources are filtered out of normal list views.
+- Hidden agent/match/tournament detail and artifact routes return `404` to non-admin callers.
+- Hidden agents cannot be selected in new matches or tournaments.
+
+Admin endpoints:
+- `/admin/blocks`
+- `/admin/hide`
+- `/admin/hidden`
+- `/admin/quotas`
+- `/admin/abuse/recent`
+
+## Production deployment
+
+### Edge/TLS
+
+Traefik handles:
+- TLS via Let's Encrypt
+- `https://<domain>/` -> frontend
+- `https://<domain>/api/*` -> backend
+- metrics protection
+- edge rate limiting
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
 
-### Scaled stack with shared services
+### Multi-instance baseline
 
-This is the practical launch baseline for multi-instance deployment.
+This is the practical launch stack:
 
 ```bash
 docker compose \
@@ -134,35 +194,19 @@ docker compose \
 ```
 
 Optional overlays:
-- Monitoring: `-f docker-compose.monitoring.yml`
-- Retention maintenance loop: `-f docker-compose.maintenance.yml`
-- Backup sidecar: `-f docker-compose.backup.yml`
+- monitoring: `-f docker-compose.monitoring.yml`
+- retention maintenance loop: `-f docker-compose.maintenance.yml`
+- backup sidecar: `-f docker-compose.backup.yml`
 
 Recommended production settings:
+- `HOWLHOUSE_ENV=production`
 - `HOWLHOUSE_AUTH_MODE=verified`
 - `HOWLHOUSE_TRUST_PROXY_HEADERS=true`
+- `HOWLHOUSE_TRUSTED_PROXY_CIDRS=<your proxy/network CIDRs>`
 - `NEXT_PUBLIC_API_BASE_URL=/api`
 - `HOWLHOUSE_METRICS_ENABLED=true`
 - `HOWLHOUSE_RETENTION_ENABLED=true`
-
-## Security and moderation
-
-Auth modes:
-- `open`: default, no identity required for mutations
-- `verified`: verified identity required for mutations, admin header can bypass
-- `admin`: admin token required for mutations
-
-Moderation behavior:
-- `created_by_ip` is stored for forensics but redacted to `null` for non-admin API callers
-- hidden agents, matches, and tournaments are excluded from normal list routes
-- hidden resources return `404` to non-admin detail, replay, SSE, recap, and share-card access
-
-Admin endpoints:
-- `/admin/blocks`
-- `/admin/hide`
-- `/admin/hidden`
-- `/admin/quotas`
-- `/admin/abuse/recent`
+- `HOWLHOUSE_ENABLE_UNSAFE_LOCAL_AGENT_RUNTIME=false`
 
 ## Operations
 
@@ -173,11 +217,11 @@ tools/smoke/smoke_production_stack.sh
 ```
 
 The smoke script:
-- boots the production-like compose stack
+- boots the compose stack with production-like overlays
 - checks `/api/healthz`
 - creates and queues a match
-- waits for completion through the API
-- fetches replay and validates `match_ended`
+- waits for completion
+- fetches replay and verifies the match completed end-to-end
 
 ### Run retention pruning manually
 
@@ -226,13 +270,14 @@ make frontend-test
 Start from [`.env.example`](.env.example).
 
 Important groups:
-- core app config, logging, and CORS
-- storage: `HOWLHOUSE_DATABASE_URL`, blob-store settings
-- workers and queue leases
+- core app config, logging, CORS
+- database and blob store config
+- workers and leases
+- sandbox controls and unsafe-local-runtime toggle
 - identity, auth mode, admin tokens, quotas
-- moderation retention settings
-- observability: logs, metrics, tracing
-- edge ingress: domain, TLS email, metrics auth
+- moderation and retention
+- observability, metrics, tracing
+- edge ingress, domain, TLS, metrics auth
 
 ## Documentation map
 

@@ -12,35 +12,35 @@ from howlhouse.platform.access_control import (
     require_mutation_access,
 )
 from howlhouse.platform.agent_ingest import ingest_agent_package
+from howlhouse.platform.runtime_policy import ensure_agent_runtime_allowed
 from howlhouse.platform.store import AgentRecord
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
 
 def _agent_summary(record: AgentRecord, *, admin_view: bool) -> dict[str, Any]:
-    return {
+    payload = {
         "agent_id": record.agent_id,
         "name": record.name,
         "version": record.version,
         "runtime_type": record.runtime_type,
-        "created_by_identity_id": record.created_by_identity_id,
         "created_by_ip": record.created_by_ip if admin_view else None,
         "hidden_at": record.hidden_at,
         "hidden_reason": record.hidden_reason,
         "created_at": record.created_at,
         "updated_at": record.updated_at,
     }
+    if admin_view:
+        payload["created_by_identity_id"] = record.created_by_identity_id
+    return payload
 
 
 def _agent_detail(record: AgentRecord, *, admin_view: bool) -> dict[str, Any]:
     payload = _agent_summary(record, admin_view=admin_view)
-    payload.update(
-        {
-            "strategy_text": record.strategy_text,
-            "package_path": record.package_path,
-            "entrypoint": record.entrypoint,
-        }
-    )
+    payload["strategy_text"] = record.strategy_text
+    if admin_view:
+        payload["package_path"] = record.package_path
+        payload["entrypoint"] = record.entrypoint
     return payload
 
 
@@ -55,6 +55,10 @@ async def upload_agent(
     store = request.app.state.store
     settings = request.app.state.settings
     actor = require_mutation_access(request, action=ACTION_AGENT_UPLOAD)
+    try:
+        ensure_agent_runtime_allowed(settings, runtime_type)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     normalized_name = name.strip()
     normalized_version = version.strip()
     if not normalized_name:

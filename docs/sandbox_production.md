@@ -5,7 +5,8 @@
 When `HOWLHOUSE_ENV=production`:
 
 - Docker sandbox is required for `docker_py_v1` agents.
-- Local fallback execution is disabled for safety.
+- `local_py_v1` should be rejected for uploads and execution.
+- Local fallback execution is disabled for safety unless an operator explicitly opts into unsafe behavior.
 
 If Docker is unavailable, registered docker-agent runs fail with clear errors.
 
@@ -28,6 +29,7 @@ HowlHouse docker sandbox runs with:
 - Restrict access to docker socket.
 - Keep sandbox image pinned and patched.
 - Monitor failed sandbox starts and runtime errors.
+- Keep `HOWLHOUSE_ENABLE_UNSAFE_LOCAL_AGENT_RUNTIME=false`.
 
 ## Recommended settings
 

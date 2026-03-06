@@ -10,6 +10,8 @@ from howlhouse.api.app import create_app
 from howlhouse.core.config import Settings
 from howlhouse.platform.store import MatchStore
 
+ADMIN_HEADERS = {"X-HowlHouse-Admin": "ops-secret"}
+
 
 def _build_agent_zip(token: str) -> bytes:
     buffer = io.BytesIO()
@@ -49,6 +51,7 @@ def test_match_async_run_enqueues_job_and_worker_processes_it(tmp_path, monkeypa
     settings = Settings(
         env="test",
         database_url=f"sqlite:///{tmp_path / 'howlhouse.db'}",
+        admin_tokens="ops-secret",
     )
     app = create_app(settings)
 
@@ -72,7 +75,7 @@ def test_match_async_run_enqueues_job_and_worker_processes_it(tmp_path, monkeypa
         assert done.status_code == 200, done.text
         assert done.json()["status"] == "finished"
 
-        replay = client.get(f"/matches/{match_id}/replay?visibility=all")
+        replay = client.get(f"/matches/{match_id}/replay?visibility=all", headers=ADMIN_HEADERS)
         assert replay.status_code == 200, replay.text
         events = [json.loads(line) for line in replay.text.splitlines() if line.strip()]
         assert any(event["type"] == "match_ended" for event in events)
@@ -84,6 +87,7 @@ def test_tournament_async_run_enqueues_job_and_worker_processes_it(tmp_path, mon
         env="test",
         database_url=f"sqlite:///{tmp_path / 'howlhouse.db'}",
         sandbox_allow_local_fallback=True,
+        admin_tokens="ops-secret",
     )
     app = create_app(settings)
 

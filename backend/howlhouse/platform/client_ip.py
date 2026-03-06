@@ -38,10 +38,33 @@ def _parse_ip(value: str | None) -> str | None:
     return None
 
 
+def _trusted_proxy_networks(raw_value: str) -> list[ipaddress.IPv4Network | ipaddress.IPv6Network]:
+    networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
+    for item in str(raw_value or "").split(","):
+        candidate = item.strip()
+        if not candidate:
+            continue
+        try:
+            networks.append(ipaddress.ip_network(candidate, strict=False))
+        except ValueError:
+            continue
+    return networks
+
+
 def get_client_ip(request: Request, settings: Settings) -> str:
     direct_ip = _parse_ip(request.client.host if request.client else None)
 
     if not settings.trust_proxy_headers:
+        return direct_ip or "unknown"
+
+    trusted_networks = _trusted_proxy_networks(settings.trusted_proxy_cidrs)
+    if not trusted_networks or direct_ip is None:
+        return direct_ip or "unknown"
+    try:
+        parsed_direct_ip = ipaddress.ip_address(direct_ip)
+    except ValueError:
+        return direct_ip or "unknown"
+    if not any(parsed_direct_ip in network for network in trusted_networks):
         return direct_ip or "unknown"
 
     raw_xff = request.headers.get("x-forwarded-for")

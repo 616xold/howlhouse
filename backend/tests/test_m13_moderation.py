@@ -51,7 +51,7 @@ def _create_client(settings: Settings, *, with_verifier: bool = False) -> TestCl
     app = create_app(settings)
     if with_verifier:
         app.state.identity_verifier = StubIdentityVerifier()
-    return TestClient(app)
+    return TestClient(app, client=("127.0.0.1", 50000))
 
 
 def _create_tournament_with_agents(client: TestClient, *, prefix: str) -> tuple[str, str, str, str]:
@@ -282,6 +282,85 @@ def test_hidden_match_replay_returns_404_for_non_admin(tmp_path, monkeypatch):
         assert replay_admin.status_code == 200
 
 
+def test_public_dtos_redact_internal_fields_for_non_admin(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    settings = Settings(
+        env="test",
+        database_url=f"sqlite:///{tmp_path / 'howlhouse.db'}",
+        auth_mode="open",
+        admin_tokens="ops-secret",
+    )
+    admin_headers = {"X-HowlHouse-Admin": "ops-secret"}
+
+    with _create_client(settings) as client:
+        agent_a = _upload_agent(client, "RedactAgentA")
+        agent_b = _upload_agent(client, "RedactAgentB")
+        assert agent_a.status_code == 200, agent_a.text
+        assert agent_b.status_code == 200, agent_b.text
+
+        season = client.post(
+            "/seasons",
+            json={
+                "name": "Redact Season",
+                "initial_rating": 1200,
+                "k_factor": 32,
+                "activate": True,
+            },
+        )
+        assert season.status_code == 200, season.text
+
+        tournament = client.post(
+            "/tournaments",
+            json={
+                "season_id": season.json()["season_id"],
+                "name": "Redact Cup",
+                "seed": 1410,
+                "participant_agent_ids": [agent_a.json()["agent_id"], agent_b.json()["agent_id"]],
+                "games_per_matchup": 1,
+            },
+        )
+        assert tournament.status_code == 200, tournament.text
+
+        created = client.post("/matches", json={"seed": 1411, "agent_set": "scripted"})
+        assert created.status_code == 200, created.text
+        match_id = created.json()["match_id"]
+        run = client.post(f"/matches/{match_id}/run?sync=true")
+        assert run.status_code == 200, run.text
+
+        agent_public = client.get(f"/agents/{agent_a.json()['agent_id']}").json()
+        match_public = client.get(f"/matches/{match_id}").json()
+        tournament_public = client.get(f"/tournaments/{tournament.json()['tournament_id']}").json()
+
+        assert "package_path" not in agent_public
+        assert "entrypoint" not in agent_public
+        assert "created_by_identity_id" not in agent_public
+        assert "replay_path" not in match_public
+        assert "replay_key" not in match_public
+        assert "replay_uri" not in match_public
+        assert "postprocess_error" not in match_public
+        assert "created_by_identity_id" not in match_public
+        assert "created_by_identity_id" not in tournament_public
+
+        agent_admin = client.get(
+            f"/agents/{agent_a.json()['agent_id']}", headers=admin_headers
+        ).json()
+        match_admin = client.get(f"/matches/{match_id}", headers=admin_headers).json()
+        tournament_admin = client.get(
+            f"/tournaments/{tournament.json()['tournament_id']}",
+            headers=admin_headers,
+        ).json()
+
+        assert "package_path" in agent_admin
+        assert "entrypoint" in agent_admin
+        assert "created_by_identity_id" in agent_admin
+        assert "replay_path" in match_admin
+        assert "replay_key" in match_admin
+        assert "replay_uri" in match_admin
+        assert "postprocess_error" in match_admin
+        assert "created_by_identity_id" in match_admin
+        assert "created_by_identity_id" in tournament_admin
+
+
 def test_blocked_identity_cannot_create_match_in_verified_mode(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     settings = Settings(
@@ -322,6 +401,7 @@ def test_blocked_ip_cannot_upload_agent_in_open_mode(tmp_path, monkeypatch):
         admin_tokens="ops-secret",
         trust_proxy_headers=True,
         trusted_proxy_hops=1,
+        trusted_proxy_cidrs="127.0.0.0/8",
     )
 
     with _create_client(settings) as client:
