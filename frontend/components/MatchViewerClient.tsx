@@ -7,7 +7,7 @@ import { apiUrl, fetchJson } from "../lib/api";
 import { useMatchEvents } from "../lib/useMatchEvents";
 import type {
   MatchEventMode,
-  MatchRecord,
+  PublicMatchRecord,
   RecapPayload,
   ReplayEvent,
   RosterEntry,
@@ -45,7 +45,7 @@ interface MatchViewerClientProps {
 }
 
 export function MatchViewerClient({ matchId }: MatchViewerClientProps) {
-  const [match, setMatch] = useState<MatchRecord | null>(null);
+  const [match, setMatch] = useState<PublicMatchRecord | null>(null);
   const [mode, setMode] = useState<MatchEventMode>("replay");
   const [visibility, setVisibility] = useState<VisibilityMode>("public");
   const [actionError, setActionError] = useState<string | null>(null);
@@ -57,7 +57,7 @@ export function MatchViewerClient({ matchId }: MatchViewerClientProps) {
 
   const fetchMatch = useCallback(async () => {
     try {
-      const next = await fetchJson<MatchRecord>(`/matches/${matchId}`);
+      const next = await fetchJson<PublicMatchRecord>(`/matches/${matchId}`);
       setMatch(next);
       if (next.status === "running") {
         setMode("live");
@@ -207,12 +207,12 @@ export function MatchViewerClient({ matchId }: MatchViewerClientProps) {
   const canRun = match?.status === "created" || match?.status === "failed";
 
   const runMatch = useCallback(async () => {
-    setRunningRequest(true);
-    setActionError(null);
-    try {
-      await fetchJson<MatchRecord>(`/matches/${matchId}/run?sync=false`, {
-        method: "POST"
-      });
+      setRunningRequest(true);
+      setActionError(null);
+      try {
+        await fetchJson<PublicMatchRecord>(`/matches/${matchId}/run?sync=false`, {
+          method: "POST"
+        });
       setMode("live");
       fetchMatch();
     } catch (err) {

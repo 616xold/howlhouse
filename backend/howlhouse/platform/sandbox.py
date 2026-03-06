@@ -317,6 +317,8 @@ class SandboxAgentProxy:
             "--rm",
             "-i",
             "--network=none",
+            "--user",
+            "65534:65534",
             "--cpus",
             self._settings.sandbox_cpu_limit,
             "--memory",

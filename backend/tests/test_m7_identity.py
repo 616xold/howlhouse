@@ -173,6 +173,7 @@ def test_production_requires_https_for_identity_and_distribution_urls(tmp_path, 
                 database_url=f"sqlite:///{db_path}",
                 identity_enabled=True,
                 identity_verify_url="http://identity.example/verify",
+                allow_degraded_start_without_docker=True,
             )
         )
 
@@ -183,6 +184,7 @@ def test_production_requires_https_for_identity_and_distribution_urls(tmp_path, 
                 database_url=f"sqlite:///{db_path}",
                 distribution_enabled=True,
                 distribution_post_url="http://publisher.example/post",
+                allow_degraded_start_without_docker=True,
             )
         )
 
@@ -199,6 +201,7 @@ def test_outbound_hostname_allowlists_are_enforced(tmp_path, monkeypatch):
                 identity_enabled=True,
                 identity_verify_url="https://identity.example/verify",
                 identity_verify_host_allowlist="other.example",
+                allow_degraded_start_without_docker=True,
             )
         )
 
@@ -212,6 +215,7 @@ def test_outbound_hostname_allowlists_are_enforced(tmp_path, monkeypatch):
             distribution_enabled=True,
             distribution_post_url="https://publisher.example/post",
             distribution_post_host_allowlist="publisher.example",
+            allow_degraded_start_without_docker=True,
         )
     )
     assert app is not None

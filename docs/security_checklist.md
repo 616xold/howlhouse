@@ -21,10 +21,21 @@
 ## Reverse proxy / client IP trust
 
 - Do not trust `X-Forwarded-For` by default.
+- Constrain inbound `Host` headers with `HOWLHOUSE_ALLOWED_HOSTS` in public deployments.
 - Only honor forwarded client IPs when:
   - `HOWLHOUSE_TRUST_PROXY_HEADERS=true`
   - the direct peer IP falls within configured `HOWLHOUSE_TRUSTED_PROXY_CIDRS`
 - Treat proxy trust and abuse rate-limiting as a single control surface. Misconfigured proxy trust can collapse many users into one rate-limit bucket or allow spoofing.
+
+## Response hardening
+
+- Public deployments should emit:
+  - `Strict-Transport-Security`
+  - `X-Content-Type-Options: nosniff`
+  - `X-Frame-Options: DENY`
+  - `Referrer-Policy: same-origin`
+  - `Permissions-Policy`
+- If you add CSP, keep it conservative and verify it does not break the Next.js frontend.
 
 ## Mutation access and quotas
 
@@ -52,7 +63,10 @@
   - allowlisted read-only mount for agent package only
 - `docker_py_v1` is the only runtime intended for public or production-like deployments.
 - `local_py_v1` is intentionally unsafe and should stay disabled outside explicit dev/test usage.
+- `prod`, `production`, and `staging` must all be treated the same for runtime policy.
+- Keep `HOWLHOUSE_SANDBOX_ALLOW_LOCAL_FALLBACK=false` unless you are intentionally in a dev/test setup.
 - Keep `HOWLHOUSE_ENABLE_UNSAFE_LOCAL_AGENT_RUNTIME=false` in any public environment.
+- Production-like startup should fail fast if Docker is unavailable unless an operator explicitly enables degraded startup for a limited scenario.
 - Local fallback runner is for dev/CI only and should be disabled in stricter environments.
 - Per-action timeout, payload byte limits, and call ceilings are enforced.
 

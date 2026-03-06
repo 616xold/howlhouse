@@ -4,7 +4,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import { fetchJson } from "../lib/api";
-import type { AgentRecord, MatchRecord } from "../lib/types";
+import type { PublicAgentRecord, PublicMatchRecord } from "../lib/types";
 
 function randomSeed(): number {
   return Math.floor(Math.random() * 1_000_000_000);
@@ -22,8 +22,8 @@ function formatIso(iso: string | null): string {
 }
 
 export function MatchListClient() {
-  const [matches, setMatches] = useState<MatchRecord[]>([]);
-  const [agents, setAgents] = useState<AgentRecord[]>([]);
+  const [matches, setMatches] = useState<PublicMatchRecord[]>([]);
+  const [agents, setAgents] = useState<PublicAgentRecord[]>([]);
   const [seed, setSeed] = useState<number>(randomSeed);
   const [createMode, setCreateMode] = useState<"scripted" | "bring">("scripted");
   const [selectedAgentId, setSelectedAgentId] = useState<string>("");
@@ -32,7 +32,7 @@ export function MatchListClient() {
 
   const fetchMatches = useCallback(async () => {
     try {
-      const data = await fetchJson<MatchRecord[]>("/matches");
+      const data = await fetchJson<PublicMatchRecord[]>("/matches");
       setMatches(data);
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : "Failed to fetch matches");
@@ -41,7 +41,7 @@ export function MatchListClient() {
 
   const fetchAgents = useCallback(async () => {
     try {
-      const data = await fetchJson<AgentRecord[]>("/agents");
+      const data = await fetchJson<PublicAgentRecord[]>("/agents");
       setAgents(data);
       if (!selectedAgentId && data.length > 0) {
         setSelectedAgentId(data[0].agent_id);
@@ -90,7 +90,7 @@ export function MatchListClient() {
           body.roster = roster;
         }
 
-        await fetchJson<MatchRecord>("/matches", {
+        await fetchJson<PublicMatchRecord>("/matches", {
           method: "POST",
           body: JSON.stringify(body)
         });
@@ -107,7 +107,7 @@ export function MatchListClient() {
     async (matchId: string) => {
       setRunPending((prev) => new Set(prev).add(matchId));
       try {
-        await fetchJson<MatchRecord>(`/matches/${matchId}/run?sync=false`, {
+        await fetchJson<PublicMatchRecord>(`/matches/${matchId}/run?sync=false`, {
           method: "POST"
         });
         fetchMatches();

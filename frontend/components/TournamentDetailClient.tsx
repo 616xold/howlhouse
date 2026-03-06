@@ -4,20 +4,20 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { fetchJson } from "../lib/api";
-import type { TournamentRecord } from "../lib/types";
+import type { PublicTournamentRecord } from "../lib/types";
 
 interface TournamentDetailClientProps {
   tournamentId: string;
 }
 
 export function TournamentDetailClient({ tournamentId }: TournamentDetailClientProps) {
-  const [tournament, setTournament] = useState<TournamentRecord | null>(null);
+  const [tournament, setTournament] = useState<PublicTournamentRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState<boolean>(false);
 
   const load = useCallback(async () => {
     try {
-      const data = await fetchJson<TournamentRecord>(`/tournaments/${tournamentId}`);
+      const data = await fetchJson<PublicTournamentRecord>(`/tournaments/${tournamentId}`);
       setTournament(data);
       setError(null);
     } catch (err) {
@@ -41,9 +41,12 @@ export function TournamentDetailClient({ tournamentId }: TournamentDetailClientP
     setRunning(true);
     setError(null);
     try {
-      const updated = await fetchJson<TournamentRecord>(`/tournaments/${tournamentId}/run?sync=false`, {
-        method: "POST"
-      });
+      const updated = await fetchJson<PublicTournamentRecord>(
+        `/tournaments/${tournamentId}/run?sync=false`,
+        {
+          method: "POST"
+        }
+      );
       setTournament(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start tournament");

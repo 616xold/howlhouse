@@ -149,6 +149,49 @@ def test_metrics_endpoint_disabled(client: TestClient):
     assert response.status_code == 404
 
 
+def test_trusted_host_middleware_rejects_unconfigured_host(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    db_path = tmp_path / "howlhouse.db"
+    settings = Settings(
+        env="test",
+        database_url=f"sqlite:///{db_path}",
+        allowed_hosts="testserver,api.example.test",
+    )
+    app = create_app(settings)
+
+    with TestClient(app) as test_client:
+        valid = test_client.get("/healthz", headers={"Host": "api.example.test"})
+        assert valid.status_code == 200
+
+        invalid = test_client.get("/healthz", headers={"Host": "evil.example"})
+        assert invalid.status_code == 400
+
+
+def test_https_responses_include_strict_security_headers(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    db_path = tmp_path / "howlhouse.db"
+    settings = Settings(
+        env="production",
+        database_url=f"sqlite:///{db_path}",
+        allowed_hosts="testserver",
+        allow_degraded_start_without_docker=True,
+    )
+    app = create_app(settings)
+
+    with TestClient(app, base_url="https://testserver") as test_client:
+        response = test_client.get("/healthz")
+        assert response.status_code == 200
+        assert response.headers.get("strict-transport-security") == (
+            "max-age=31536000; includeSubDomains"
+        )
+        assert response.headers.get("x-content-type-options") == "nosniff"
+        assert response.headers.get("x-frame-options") == "DENY"
+        assert response.headers.get("referrer-policy") == "same-origin"
+        assert response.headers.get("permissions-policy") == (
+            "camera=(), geolocation=(), microphone=(), payment=(), usb=()"
+        )
+
+
 def test_identity_rate_limited_response_has_observability_headers_and_metrics(
     tmp_path, monkeypatch
 ):

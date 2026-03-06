@@ -18,8 +18,10 @@ Set in `.env` (starting from `.env.example`):
 - `HOWLHOUSE_TRUST_PROXY_HEADERS=true`
 - `HOWLHOUSE_TRUSTED_PROXY_HOPS=1`
 - `HOWLHOUSE_TRUSTED_PROXY_CIDRS=<proxy subnet list>`
+- `HOWLHOUSE_ALLOWED_HOSTS=<comma-separated public hostnames>`
 - `NEXT_PUBLIC_API_BASE_URL=/api`
 - `NEXT_PUBLIC_ENABLE_UNSAFE_LOCAL_AGENT_RUNTIME=false`
+- `HOWLHOUSE_SANDBOX_ALLOW_LOCAL_FALLBACK=false`
 - `HOWLHOUSE_AUTH_MODE=verified` (or `admin`)
 - `HOWLHOUSE_ADMIN_TOKENS=<comma-separated-secret-tokens>`
 - `HOWLHOUSE_RETENTION_ENABLED=true`
@@ -31,6 +33,7 @@ Optional but recommended:
 - `HOWLHOUSE_LOG_JSON=true`
 - `HOWLHOUSE_METRICS_ENABLED=true`
 - `HOWLHOUSE_ENABLE_UNSAFE_LOCAL_AGENT_RUNTIME=false`
+- `HOWLHOUSE_ALLOW_DEGRADED_START_WITHOUT_DOCKER=false`
 - If identity verification is enabled:
   - `HOWLHOUSE_IDENTITY_VERIFY_URL=https://...`
   - `HOWLHOUSE_IDENTITY_VERIFY_HOST_ALLOWLIST=verifier.example.com`
@@ -80,6 +83,7 @@ What this does:
 - `/api` prefix is stripped at the proxy before forwarding to backend
 - Metrics are exposed at `https://<HOWLHOUSE_DOMAIN>/metrics` with basic auth
 - Frontend should use `NEXT_PUBLIC_API_BASE_URL=/api` in this mode
+- Traefik attaches production security headers on frontend, API, and metrics responses
 
 ## Verify TLS and redirects
 
@@ -127,9 +131,23 @@ docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
 - API rate limit: average `20 req/s`, burst `40`
 - Identity API (`/api/identity/*`) stricter limit: average `5 req/s`, burst `10`
 - Metrics route protected by basic auth
+- Security headers:
+  - `Strict-Transport-Security`
+  - `X-Content-Type-Options: nosniff`
+  - `X-Frame-Options: DENY`
+  - `Referrer-Policy: same-origin`
+  - `Permissions-Policy`
 - `X-Forwarded-For` is only trusted when the direct peer is within `HOWLHOUSE_TRUSTED_PROXY_CIDRS`
 - Server-side mutation controls support `open`, `verified`, and `admin` auth modes
 - Retention pruning should stay enabled in production to cap growth of `jobs`/`usage_events`
+
+## Release checklist
+
+- set `HOWLHOUSE_AUTH_MODE=verified` or `admin`
+- set `HOWLHOUSE_ALLOWED_HOSTS` to the exact public hostnames
+- set `HOWLHOUSE_TRUSTED_PROXY_CIDRS` to your actual proxy ranges
+- confirm admin tokens are present and stored outside shell history
+- verify HTTPS redirect, HSTS, and the other security headers with `curl -I`
 
 ## ACME certificate storage and rotation
 

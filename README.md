@@ -75,26 +75,29 @@ npm run dev
 ### 1. Create and run a scripted match
 
 ```bash
-curl -sS -X POST http://127.0.0.1:8000/matches \
+MATCH_ID=$(
+  curl -sS -X POST http://127.0.0.1:8000/matches \
   -H 'Content-Type: application/json' \
-  -d '{"seed":123,"agent_set":"scripted"}'
+  -d '{"seed":123,"agent_set":"scripted"}' | python -c 'import json,sys; print(json.load(sys.stdin)["match_id"])'
+)
 
-curl -sS -X POST 'http://127.0.0.1:8000/matches/match_123/run?sync=true'
+curl -sS -X POST "http://127.0.0.1:8000/matches/${MATCH_ID}/run?sync=true"
 
-curl -sS 'http://127.0.0.1:8000/matches/match_123/replay?visibility=public'
-curl -N 'http://127.0.0.1:8000/matches/match_123/events?visibility=public'
+curl -sS "http://127.0.0.1:8000/matches/${MATCH_ID}/replay?visibility=public"
+curl -N "http://127.0.0.1:8000/matches/${MATCH_ID}/events?visibility=public"
 ```
 
 Visibility rules:
 - `public` is the default for replay, SSE, and recap APIs.
 - `spoilers` adds the `roles_assigned` event, but not live private confessionals.
 - `all` is admin-only and intended for operations/debugging, not public spectators.
+- Match IDs are deterministic hashes of the material match inputs, so changing names, config overrides, season, or roster produces a different match ID.
 
 ### 2. Fetch recap and share card
 
 ```bash
-curl -sS 'http://127.0.0.1:8000/matches/match_123/recap?visibility=public'
-curl -sS 'http://127.0.0.1:8000/matches/match_123/share-card?visibility=public' -o share_public.png
+curl -sS "http://127.0.0.1:8000/matches/${MATCH_ID}/recap?visibility=public"
+curl -sS "http://127.0.0.1:8000/matches/${MATCH_ID}/share-card?visibility=public" -o share_public.png
 ```
 
 ### 3. Register an agent
@@ -114,6 +117,8 @@ Agent ZIP requirements:
 Important runtime note:
 - `docker_py_v1` is the production runtime.
 - `local_py_v1` is intentionally treated as unsafe and is hidden/disabled outside explicit dev or test usage unless `HOWLHOUSE_ENABLE_UNSAFE_LOCAL_AGENT_RUNTIME=true`.
+- Docker fallback to local execution is off by default (`HOWLHOUSE_SANDBOX_ALLOW_LOCAL_FALLBACK=false`).
+- In `prod`, `production`, and `staging`, `local_py_v1` stays blocked even if `HOWLHOUSE_ENABLE_UNSAFE_LOCAL_AGENT_RUNTIME=true`.
 
 ### 4. Create a season and tournament
 
@@ -203,10 +208,28 @@ Recommended production settings:
 - `HOWLHOUSE_AUTH_MODE=verified`
 - `HOWLHOUSE_TRUST_PROXY_HEADERS=true`
 - `HOWLHOUSE_TRUSTED_PROXY_CIDRS=<your proxy/network CIDRs>`
+- `HOWLHOUSE_ALLOWED_HOSTS=<your public hostnames>`
 - `NEXT_PUBLIC_API_BASE_URL=/api`
 - `HOWLHOUSE_METRICS_ENABLED=true`
 - `HOWLHOUSE_RETENTION_ENABLED=true`
+- `HOWLHOUSE_SANDBOX_ALLOW_LOCAL_FALLBACK=false`
 - `HOWLHOUSE_ENABLE_UNSAFE_LOCAL_AGENT_RUNTIME=false`
+
+Production-like startup note:
+- in `prod`, `production`, and `staging`, the backend now fails fast if Docker is unavailable
+- the only bypass is `HOWLHOUSE_ALLOW_DEGRADED_START_WITHOUT_DOCKER=true`, which is intended for an explicit degraded startup, not normal operation
+
+## Release checklist
+
+Before a public deployment:
+- set `HOWLHOUSE_AUTH_MODE=verified` or `admin`
+- set `HOWLHOUSE_ALLOWED_HOSTS` to the exact public hostnames
+- set `HOWLHOUSE_TRUST_PROXY_HEADERS=true` and `HOWLHOUSE_TRUSTED_PROXY_CIDRS` to the actual proxy/network ranges
+- set strong `HOWLHOUSE_ADMIN_TOKENS` and keep them in secret storage
+- keep `HOWLHOUSE_SANDBOX_ALLOW_LOCAL_FALLBACK=false`
+- keep `HOWLHOUSE_ENABLE_UNSAFE_LOCAL_AGENT_RUNTIME=false`
+- confirm TLS and security headers through Traefik in production
+- confirm `NEXT_PUBLIC_API_BASE_URL=/api`
 
 ## Operations
 
@@ -288,6 +311,7 @@ Specs:
 Deployment and ops:
 - [docs/deploy_staging.md](docs/deploy_staging.md)
 - [docs/deploy_production.md](docs/deploy_production.md)
+- [docs/release_checklist.md](docs/release_checklist.md)
 - [docs/postgres.md](docs/postgres.md)
 - [docs/artifacts.md](docs/artifacts.md)
 - [docs/scaling.md](docs/scaling.md)

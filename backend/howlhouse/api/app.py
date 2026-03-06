@@ -8,6 +8,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from howlhouse.api.identity_context import install_identity_middleware
 from howlhouse.api.routers.admin import router as admin_router
@@ -92,10 +93,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         publisher = NoOpRecapPublisher()
 
     if is_production_like_env(resolved_settings.env) and not docker_available():
+        if not resolved_settings.allow_degraded_start_without_docker:
+            raise RuntimeError(
+                "Docker is required when HOWLHOUSE_ENV is prod, production, or staging. "
+                "Set HOWLHOUSE_ALLOW_DEGRADED_START_WITHOUT_DOCKER=true only for an explicit "
+                "degraded startup."
+            )
         logger.warning(
             "docker_unavailable_in_production_like_env",
             extra={
-                "reason": "registered_docker_agents_will_fail",
+                "reason": "degraded_start_allowed_registered_docker_agents_will_fail",
             },
         )
 
@@ -137,6 +144,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     cors_origins = [
         origin.strip() for origin in resolved_settings.cors_origins.split(",") if origin.strip()
     ]
+    allowed_hosts = [
+        host.strip() for host in resolved_settings.allowed_hosts.split(",") if host.strip()
+    ]
     if cors_origins:
         app.add_middleware(
             CORSMiddleware,
@@ -145,6 +155,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             allow_headers=["*"],
             allow_credentials=False,
         )
+    if allowed_hosts:
+        app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)
     install_identity_middleware(app)
     # Register observability after identity middleware so it wraps all responses,
     # including identity early returns (e.g. rate-limited 429).

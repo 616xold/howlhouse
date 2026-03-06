@@ -252,6 +252,16 @@ def install_request_observability_middleware(app: FastAPI, settings) -> None:
             response.headers.setdefault("X-Content-Type-Options", "nosniff")
             response.headers.setdefault("X-Frame-Options", "DENY")
             response.headers.setdefault("Referrer-Policy", "same-origin")
+            response.headers.setdefault(
+                "Permissions-Policy",
+                "camera=(), geolocation=(), microphone=(), payment=(), usb=()",
+            )
+            forwarded_proto = request.headers.get("x-forwarded-proto", "").strip().lower()
+            if request.url.scheme == "https" or forwarded_proto == "https":
+                response.headers.setdefault(
+                    "Strict-Transport-Security",
+                    "max-age=31536000; includeSubDomains",
+                )
             logger.info(
                 "request_completed",
                 extra={

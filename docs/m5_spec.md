@@ -106,8 +106,14 @@ Rules:
 
 Deterministic match id:
 
-- no roster: `match_<seed>`
-- roster present: `match_<seed>_<short_hash>` where hash is deterministic from seed + config_overrides + normalized roster
+- all match creation paths use `match_<seed>_<short_hash>`
+- the hash is deterministic from the material match inputs:
+  - `seed`
+  - `agent_set`
+  - resolved config
+  - resolved names
+  - `season_id`
+  - normalized roster
 
 ## Sandbox runtime
 
@@ -136,6 +142,7 @@ Output:
 When runtime is `docker_py_v1`, run with:
 
 - `--network=none`
+- `--user 65534:65534`
 - `--cpus=0.5`
 - `--memory=256m`
 - `--pids-limit=128`
@@ -150,7 +157,9 @@ When runtime is `docker_py_v1`, run with:
 For CI/dev or missing Docker:
 
 - `local_py_v1` uses isolated subprocess (`python -I -u` harness)
-- if runtime requested is docker and docker unavailable, fallback is allowed when configured
+- if runtime requested is docker and docker unavailable, fallback is allowed only when explicitly configured
+- default `HOWLHOUSE_SANDBOX_ALLOW_LOCAL_FALLBACK` is `false`
+- `prod`, `production`, and `staging` never allow `local_py_v1`, even if `HOWLHOUSE_ENABLE_UNSAFE_LOCAL_AGENT_RUNTIME=true`
 
 ### Guards
 
@@ -170,6 +179,7 @@ For CI/dev or missing Docker:
 - `HOWLHOUSE_AGENT_STRATEGY_MAX_CHARS`
 - `HOWLHOUSE_SANDBOX_DOCKER_IMAGE`
 - `HOWLHOUSE_SANDBOX_ALLOW_LOCAL_FALLBACK`
+- `HOWLHOUSE_ALLOW_DEGRADED_START_WITHOUT_DOCKER`
 - `HOWLHOUSE_SANDBOX_ACT_TIMEOUT_MS`
 - `HOWLHOUSE_SANDBOX_MAX_OBSERVATION_BYTES`
 - `HOWLHOUSE_SANDBOX_MAX_ACTION_BYTES`
@@ -183,3 +193,4 @@ For CI/dev or missing Docker:
 - Docker runtime requires Docker Desktop / docker daemon.
 - CI and local tests can run with `local_py_v1` without Docker.
 - Frontend BYA flow uses `/agents` and roster-enabled `/matches` create.
+- Production-like environments should not rely on local fallback or degraded startup.

@@ -101,7 +101,6 @@ jobs:
 
   docker-optional:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -115,6 +114,13 @@ jobs:
           pip install -e .
       - name: Docker integration tests (optional)
         run: |
+          echo "Docker version:"
+          docker version || true
+          echo "Docker info:"
+          if ! docker info; then
+            echo "Skipping docker-marked tests: docker daemon unavailable on this runner"
+            exit 0
+          fi
           cd backend
           set +e
           HOWLHOUSE_RUN_DOCKER_TESTS=1 pytest -q -m docker

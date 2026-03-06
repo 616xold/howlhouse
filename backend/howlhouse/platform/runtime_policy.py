@@ -20,7 +20,7 @@ def is_production_like_env(env: str) -> bool:
 
 def unsafe_local_agent_runtime_allowed(settings: Settings) -> bool:
     env = normalized_env_name(settings.env)
-    if env == "production":
+    if env in PRODUCTION_LIKE_ENVS:
         return False
     if env in DEV_LIKE_ENVS:
         return True
@@ -36,8 +36,11 @@ def ensure_agent_runtime_allowed(settings: Settings, runtime_type: str) -> None:
     if unsafe_local_agent_runtime_allowed(settings):
         return
     env = normalized_env_name(settings.env)
-    if env == "production":
-        raise ValueError("local_py_v1 is not allowed when HOWLHOUSE_ENV=production")
+    if env in PRODUCTION_LIKE_ENVS:
+        raise ValueError(
+            "local_py_v1 is not allowed in production-like environments "
+            f"(HOWLHOUSE_ENV={settings.env})"
+        )
     raise ValueError(
         "local_py_v1 is disabled outside dev/test unless "
         "HOWLHOUSE_ENABLE_UNSAFE_LOCAL_AGENT_RUNTIME=true"

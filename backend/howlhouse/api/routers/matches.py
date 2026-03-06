@@ -184,7 +184,16 @@ def _resolve_roster_and_names(
         resolved_names = {
             player_id: names_input.get(player_id, player_id) for player_id in expected_player_ids
         }
-        return roster_rows, resolved_names, None
+        normalized_roster_for_hash = [
+            {
+                "player_id": player_id,
+                "agent_type": "scripted",
+                "agent_id": "",
+                "name": names_input.get(player_id, "") or "",
+            }
+            for player_id in expected_player_ids
+        ]
+        return roster_rows, resolved_names, normalized_roster_for_hash
 
     if len(body.roster) != config.player_count:
         raise HTTPException(
@@ -280,15 +289,17 @@ def _resolve_roster_and_names(
 def _match_id_for_request(
     *,
     body: CreateMatchRequest,
+    config: GameConfig,
+    resolved_names: dict[str, str],
     normalized_roster: list[dict[str, str]] | None,
 ) -> str:
-    if normalized_roster is None:
-        return f"match_{body.seed}"
-
     payload = {
+        "agent_set": body.agent_set,
         "seed": body.seed,
-        "config_overrides": body.config_overrides,
-        "roster": normalized_roster,
+        "season_id": body.season_id or "",
+        "config": asdict(config),
+        "names": resolved_names,
+        "roster": normalized_roster or [],
     }
     digest = hashlib.sha256(
         json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
@@ -344,7 +355,12 @@ def create_match(body: CreateMatchRequest, request: Request) -> dict[str, Any]:
         store=store,
         settings=request.app.state.settings,
     )
-    match_id = _match_id_for_request(body=body, normalized_roster=normalized_roster)
+    match_id = _match_id_for_request(
+        body=body,
+        config=config,
+        resolved_names=resolved_names,
+        normalized_roster=normalized_roster,
+    )
     replay_path = str(Path("replays") / f"{match_id}.jsonl")
 
     record = store.create_match_if_missing(

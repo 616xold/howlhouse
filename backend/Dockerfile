@@ -1,4 +1,4 @@
-FROM python:3.11-slim-bookworm
+FROM python:3.11.11-slim-bookworm AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -6,11 +6,25 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+COPY constraints.txt pyproject.toml README.md ./
+COPY howlhouse ./howlhouse
+RUN pip install --upgrade pip setuptools wheel \
+    && pip wheel --no-cache-dir --wheel-dir /wheels -c constraints.txt .
 
-COPY . .
-RUN pip install --no-cache-dir .
+FROM python:3.11.11-slim-bookworm AS runner
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+
+COPY constraints.txt ./
+COPY --from=builder /wheels /wheels
+RUN pip install --upgrade pip \
+    && pip install --no-cache-dir -c constraints.txt /wheels/*
+
+COPY howlhouse ./howlhouse
 
 RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin howlhouse \
     && mkdir -p /app/data /app/replays \

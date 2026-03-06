@@ -59,7 +59,7 @@ Request body:
 
 Behavior:
 
-- `match_id = "match_<seed>"`
+- `match_id = "match_<seed>_<short_hash>"`, where the hash is deterministic from the material match inputs
 - idempotent by `match_id`
 - validates config override keys against `GameConfig`
 

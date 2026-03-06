@@ -8,7 +8,7 @@ For the same config, seed, and agent implementations, replay JSONL output must b
 
 Deterministic fields:
 
-- `match_id`: `match_<seed>`
+- `match_id`: deterministic match identifier, typically `match_<seed>_<short_hash>`
 - `id`: sequential event id (`evt_000001`, `evt_000002`, ...)
 - `t`: synthetic tick starting at `1` and incrementing by `1` per event
 - `ts`: synthetic timestamp from a fixed UTC epoch (`2026-01-01T00:00:00Z`) plus `t` seconds
@@ -25,7 +25,7 @@ Each line is one JSON object with these top-level keys:
   "id": "evt_000001",
   "t": 1,
   "ts": "2026-01-01T00:00:01Z",
-  "match_id": "match_123",
+  "match_id": "match_123_ab12cd34ef",
   "type": "match_created",
   "visibility": "public",
   "payload": {}

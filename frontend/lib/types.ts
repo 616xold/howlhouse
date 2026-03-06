@@ -12,7 +12,7 @@ export interface ReplayEvent {
   payload: Record<string, unknown>;
 }
 
-export interface MatchRecord {
+export interface PublicMatchRecord {
   match_id: string;
   seed: number;
   agent_set: string;
@@ -20,7 +20,6 @@ export interface MatchRecord {
   names: Record<string, string>;
   season_id: string | null;
   tournament_id: string | null;
-  created_by_identity_id?: string | null;
   created_by_ip: string | null;
   hidden_at: string | null;
   hidden_reason: string | null;
@@ -28,13 +27,17 @@ export interface MatchRecord {
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
-  replay_path?: string | null;
-  replay_key?: string | null;
-  replay_uri?: string | null;
   winner: string | null;
   error: string | null;
-  postprocess_error?: string | null;
   links: Record<string, string>;
+}
+
+export interface AdminMatchRecord extends PublicMatchRecord {
+  created_by_identity_id: string | null;
+  replay_path: string | null;
+  replay_key: string | null;
+  replay_uri: string | null;
+  postprocess_error: string | null;
 }
 
 export interface PredictionSummary {
@@ -49,20 +52,23 @@ export interface RosterEntry {
   name: string;
 }
 
-export interface AgentRecord {
+export interface PublicAgentRecord {
   agent_id: string;
   name: string;
   version: string;
   runtime_type: "docker_py_v1" | "local_py_v1";
-  created_by_identity_id?: string | null;
-  created_by_ip?: string | null;
-  hidden_at?: string | null;
-  hidden_reason?: string | null;
+  created_by_ip: string | null;
+  hidden_at: string | null;
+  hidden_reason: string | null;
   created_at: string;
   updated_at: string;
   strategy_text?: string;
-  package_path?: string;
-  entrypoint?: string;
+}
+
+export interface AdminAgentRecord extends PublicAgentRecord {
+  created_by_identity_id: string | null;
+  package_path: string;
+  entrypoint: string;
 }
 
 export interface ClipSuggestion {
@@ -189,7 +195,7 @@ export interface TournamentBracket {
   champion_agent_id: string | null;
 }
 
-export interface TournamentRecord {
+export interface PublicTournamentRecord {
   tournament_id: string;
   season_id: string;
   name: string;
@@ -197,12 +203,15 @@ export interface TournamentRecord {
   status: "created" | "running" | "completed" | "failed";
   champion_agent_id: string | null;
   error: string | null;
-  created_by_identity_id?: string | null;
-  created_by_ip?: string | null;
-  hidden_at?: string | null;
-  hidden_reason?: string | null;
+  created_by_ip: string | null;
+  hidden_at: string | null;
+  hidden_reason: string | null;
   created_at: string;
   updated_at: string;
   bracket: TournamentBracket;
   links: Record<string, string>;
+}
+
+export interface AdminTournamentRecord extends PublicTournamentRecord {
+  created_by_identity_id: string | null;
 }

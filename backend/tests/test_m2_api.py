@@ -48,7 +48,8 @@ def test_create_match_idempotent(client: TestClient):
     created_a = _create_match(client, seed=555)
     created_b = _create_match(client, seed=555)
 
-    assert created_a["match_id"] == created_b["match_id"] == "match_555"
+    assert created_a["match_id"] == created_b["match_id"]
+    assert created_a["match_id"].startswith("match_555_")
     assert {
         "recap",
         "share_card_public",
@@ -59,6 +60,31 @@ def test_create_match_idempotent(client: TestClient):
     assert listed.status_code == 200
     records = listed.json()
     assert len(records) == 1
+
+
+def test_match_id_changes_when_material_inputs_change(client: TestClient):
+    base = client.post("/matches", json={"seed": 556, "agent_set": "scripted"})
+    assert base.status_code == 200, base.text
+    renamed = client.post(
+        "/matches",
+        json={"seed": 556, "agent_set": "scripted", "names": {"p0": "Alice"}},
+    )
+    assert renamed.status_code == 200, renamed.text
+    overridden = client.post(
+        "/matches",
+        json={
+            "seed": 556,
+            "agent_set": "scripted",
+            "config_overrides": {"public_message_char_limit": 120},
+        },
+    )
+    assert overridden.status_code == 200, overridden.text
+
+    base_id = base.json()["match_id"]
+    renamed_id = renamed.json()["match_id"]
+    overridden_id = overridden.json()["match_id"]
+
+    assert len({base_id, renamed_id, overridden_id}) == 3
 
 
 def test_run_sync_writes_replay_and_updates_status(client: TestClient):

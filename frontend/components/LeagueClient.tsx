@@ -5,10 +5,10 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import { fetchJson } from "../lib/api";
 import type {
-  AgentRecord,
+  PublicAgentRecord,
   LeaderboardResponse,
   SeasonRecord,
-  TournamentRecord
+  PublicTournamentRecord
 } from "../lib/types";
 
 function randomSeed(): number {
@@ -27,8 +27,8 @@ export function LeagueClient() {
   const [seasons, setSeasons] = useState<SeasonRecord[]>([]);
   const [activeSeasonId, setActiveSeasonId] = useState<string | null>(null);
   const [leaderboard, setLeaderboard] = useState<LeaderboardResponse | null>(null);
-  const [tournaments, setTournaments] = useState<TournamentRecord[]>([]);
-  const [agents, setAgents] = useState<AgentRecord[]>([]);
+  const [tournaments, setTournaments] = useState<PublicTournamentRecord[]>([]);
+  const [agents, setAgents] = useState<PublicAgentRecord[]>([]);
 
   const [seasonName, setSeasonName] = useState<string>("Season 1");
   const [initialRating, setInitialRating] = useState<number>(1200);
@@ -46,7 +46,7 @@ export function LeagueClient() {
     try {
       const [seasonData, agentData] = await Promise.all([
         fetchJson<SeasonRecord[]>("/seasons"),
-        fetchJson<AgentRecord[]>("/agents")
+        fetchJson<PublicAgentRecord[]>("/agents")
       ]);
       setSeasons(seasonData);
       setAgents(agentData);
@@ -62,7 +62,7 @@ export function LeagueClient() {
 
       const [board, tourns] = await Promise.all([
         fetchJson<LeaderboardResponse>(`/seasons/${active.season_id}/leaderboard`),
-        fetchJson<TournamentRecord[]>(`/tournaments?season_id=${active.season_id}`)
+        fetchJson<PublicTournamentRecord[]>(`/tournaments?season_id=${active.season_id}`)
       ]);
       setLeaderboard(board);
       setTournaments(tourns);
@@ -143,7 +143,7 @@ export function LeagueClient() {
 
       setError(null);
       try {
-        await fetchJson<TournamentRecord>("/tournaments", {
+        await fetchJson<PublicTournamentRecord>("/tournaments", {
           method: "POST",
           body: JSON.stringify({
             season_id: activeSeasonId,

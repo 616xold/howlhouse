@@ -20,6 +20,13 @@ Recommended minimum:
 - `HOWLHOUSE_ENV=staging`
 - `HOWLHOUSE_LOG_JSON=true`
 - `HOWLHOUSE_METRICS_ENABLED=true`
+- `HOWLHOUSE_SANDBOX_ALLOW_LOCAL_FALLBACK=false`
+
+Staging note:
+
+- `staging` is treated as production-like for agent runtime policy.
+- Backend startup expects Docker to be available.
+- Only use `HOWLHOUSE_ALLOW_DEGRADED_START_WITHOUT_DOCKER=true` for an explicit degraded startup.
 
 ## Boot services
 

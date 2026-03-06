@@ -272,6 +272,7 @@ def test_local_runtime_upload_rejected_in_production(tmp_path, monkeypatch):
             env="production",
             database_url=f"sqlite:///{tmp_path / 'howlhouse.db'}",
             data_dir=str(tmp_path / "data"),
+            allow_degraded_start_without_docker=True,
         )
     )
     with TestClient(app) as client:
@@ -319,6 +320,7 @@ def test_local_runtime_registered_agent_rejected_for_match_execution_in_producti
                 database_url=f"sqlite:///{db_path}",
                 data_dir=str(data_dir),
                 admin_tokens="ops-secret",
+                allow_degraded_start_without_docker=True,
             )
         )
     ) as prod_client:

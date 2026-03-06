@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     log_json: bool = False
     secret_key: str = "dev-change-me"
     cors_origins: str = ""
+    allowed_hosts: str = "*"
 
     # Storage
     database_url: str = "sqlite:///./howlhouse.db"
@@ -33,9 +34,10 @@ class Settings(BaseSettings):
     agent_extract_max_bytes: int = 4_000_000
     agent_strategy_max_chars: int = 10_000
 
-    sandbox_docker_image: str = "python:3.11-slim"
-    sandbox_allow_local_fallback: bool = True
+    sandbox_docker_image: str = "python:3.11.11-slim-bookworm"
+    sandbox_allow_local_fallback: bool = False
     enable_unsafe_local_agent_runtime: bool = False
+    allow_degraded_start_without_docker: bool = False
     sandbox_act_timeout_ms: int = 750
     sandbox_max_observation_bytes: int = 65_536
     sandbox_max_action_bytes: int = 16_384

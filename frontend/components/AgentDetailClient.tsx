@@ -4,20 +4,20 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { fetchJson } from "../lib/api";
-import type { AgentRecord } from "../lib/types";
+import type { PublicAgentRecord } from "../lib/types";
 
 interface AgentDetailClientProps {
   agentId: string;
 }
 
 export function AgentDetailClient({ agentId }: AgentDetailClientProps) {
-  const [agent, setAgent] = useState<AgentRecord | null>(null);
+  const [agent, setAgent] = useState<PublicAgentRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
       try {
-        const data = await fetchJson<AgentRecord>(`/agents/${agentId}`);
+        const data = await fetchJson<PublicAgentRecord>(`/agents/${agentId}`);
         setAgent(data);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load agent");

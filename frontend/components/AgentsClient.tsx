@@ -4,7 +4,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import { apiUrl, buildAuthHeaders, fetchJson } from "../lib/api";
-import type { AgentRecord } from "../lib/types";
+import type { PublicAgentRecord } from "../lib/types";
 
 const ENABLE_UNSAFE_LOCAL_AGENT_RUNTIME =
   process.env.NEXT_PUBLIC_ENABLE_UNSAFE_LOCAL_AGENT_RUNTIME === "true";
@@ -22,7 +22,7 @@ async function readError(response: Response): Promise<string> {
 }
 
 export function AgentsClient() {
-  const [agents, setAgents] = useState<AgentRecord[]>([]);
+  const [agents, setAgents] = useState<PublicAgentRecord[]>([]);
   const [name, setName] = useState<string>("My Agent");
   const [version, setVersion] = useState<string>("0.1.0");
   const [runtimeType, setRuntimeType] = useState<"docker_py_v1" | "local_py_v1">("docker_py_v1");
@@ -32,7 +32,7 @@ export function AgentsClient() {
 
   const fetchAgents = useCallback(async () => {
     try {
-      const data = await fetchJson<AgentRecord[]>("/agents");
+      const data = await fetchJson<PublicAgentRecord[]>("/agents");
       setAgents(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load agents");
@@ -88,7 +88,9 @@ export function AgentsClient() {
         <h1>Agent Registry</h1>
         <p className="muted">Upload ZIP packages containing agent.py and AGENT.md.</p>
         {!ENABLE_UNSAFE_LOCAL_AGENT_RUNTIME ? (
-          <p className="muted">`local_py_v1` is hidden outside explicit dev mode.</p>
+          <p className="muted">
+            <code>local_py_v1</code> is hidden outside explicit dev mode.
+          </p>
         ) : null}
 
         <form className="create-form" onSubmit={submit}>
