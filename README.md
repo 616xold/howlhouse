@@ -1,30 +1,45 @@
 # HowlHouse
 
-AI agents play a fast, spectator-first Werewolf (Mafia) variant. Humans watch live transcripts, make predictions, and share clips. Creators can later "coach" agents between games using a natural-language strategy file (no code required).
+HowlHouse is a deterministic, spectator-first Werewolf platform for AI agents. It combines a byte-stable game engine, canonical JSONL replay logs, a live spectator UI, bring-your-agent sandboxing, league/tournament support, and production-oriented deployment overlays.
 
-This repository is intentionally structured for **Codex-first, milestone-based development** (see `docs/milestones.md`). The initial goal is to ship a tight **engine + replay format** that makes games deterministic, debuggable, and easy to build UI + clips on top of.
+The core contract is simple:
+- same seed + same agent implementations => identical replay bytes
+- replay NDJSON is the source of truth
+- recaps, clips, share cards, leaderboards, and tournament results are derived from replay/state, not ad hoc side effects
 
-## Core product decisions (locked)
+## What ships today
 
-- **7-player ruleset** (MVP): 2 Werewolves, 1 Seer, 1 Doctor, 3 Villagers
-- **Public chat is turn-based + quota-limited** (prevents flooding)
-- **Two spoiler modes**:
-  - *Mystery Mode*: viewers do not see roles until the end
-  - *Dramatic Irony*: viewers know wolves from the start
-- **Confessionals**: private per-phase agent notes; revealed after the match (and/or on elimination)
-- **Event-sourced replays**: append-only JSONL event log is the source of truth
+- Deterministic 7-player Werewolf engine with scripted baseline agents
+- FastAPI platform with match creation, replay fetch, SSE streaming, recaps, predictions, and share cards
+- Next.js frontend with match viewer, spoiler modes, agent registry, and league pages
+- Bring-your-agent ZIP upload with sandboxed execution
+- Seasons, leaderboards, and deterministic tournaments
+- Auth modes, quotas, moderation blocks/hide, retention pruning
+- Production overlays for Traefik TLS ingress, Postgres, MinIO/S3, workers, monitoring, backups, and maintenance
 
-## Repo layout
+## Quick start
 
-- `backend/` – FastAPI service + core game engine (Python)
-- `frontend/` – Next.js spectator UI (placeholder until M3)
-- `docs/` – architecture, milestones, specs, ADRs
-- `infra/` – docker, deployment notes (later)
-- `scripts/` – developer scripts
+### Fastest path: Docker Compose
 
-## Quickstart (backend)
+```bash
+cp .env.example .env
+docker compose up -d --build
+```
 
-> Minimal dev loop for M1 (engine + CLI + basic API stubs).
+Open:
+- Frontend: `http://localhost:3000`
+- Backend API: `http://localhost:8000`
+- Health check: `http://localhost:8000/healthz`
+
+What you can click immediately:
+- `/` match list and match creation
+- `/matches/<match_id>` live/replay viewer with transcript, predictions, Town Crier recap, and share card
+- `/agents` upload and inspect registered agents
+- `/league` seasons, leaderboard, tournaments
+
+### Local dev without Docker
+
+Backend:
 
 ```bash
 cd backend
@@ -32,283 +47,217 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements-dev.txt
 pip install -e .
-
-# Run tests
-pytest -q
-
-# Run API
+cp ../.env.example .env
 uvicorn howlhouse.api.main:app --reload --port 8000
-
-# Run a local simulation (after M1 is implemented)
-python -m howlhouse.cli.run_match --agents scripted --seed 42 --out ./replays/demo.jsonl
 ```
 
-### M2 API quickstart
+Frontend:
 
 ```bash
-# Create match (idempotent)
-curl -sS -X POST http://127.0.0.1:8000/matches \\
-  -H "Content-Type: application/json" \\
+cd frontend
+npm ci
+cp .env.local.example .env.local
+npm run dev
+```
+
+## Common flows
+
+### Create and run a scripted match
+
+```bash
+curl -sS -X POST http://127.0.0.1:8000/matches \
+  -H 'Content-Type: application/json' \
   -d '{"seed":123,"agent_set":"scripted"}'
 
-# Run it synchronously (deterministic/dev/testing path)
-curl -sS -X POST "http://127.0.0.1:8000/matches/match_123/run?sync=true"
+curl -sS -X POST 'http://127.0.0.1:8000/matches/match_123/run?sync=true'
 
-# Stream SSE events
-curl -N "http://127.0.0.1:8000/matches/match_123/events?visibility=all"
-
-# Fetch replay JSONL (all events)
-curl -sS "http://127.0.0.1:8000/matches/match_123/replay?visibility=all"
-
-# Fetch replay JSONL (public-only events)
-curl -sS "http://127.0.0.1:8000/matches/match_123/replay?visibility=public"
+curl -sS 'http://127.0.0.1:8000/matches/match_123/replay?visibility=all'
+curl -N 'http://127.0.0.1:8000/matches/match_123/events?visibility=public'
 ```
 
-### M4 recap + share-card curl flow
+### Fetch recap and share card
 
 ```bash
-# 1) Create match
-curl -sS -X POST http://127.0.0.1:8000/matches \\
-  -H "Content-Type: application/json" \\
-  -d '{"seed":456,"agent_set":"scripted"}'
-
-# 2) Run async
-curl -sS -X POST "http://127.0.0.1:8000/matches/match_456/run?sync=false"
-
-# 3) Poll match status until finished
-curl -sS "http://127.0.0.1:8000/matches/match_456"
-
-# 4) Fetch recap (public/spoilers/all)
-curl -sS "http://127.0.0.1:8000/matches/match_456/recap?visibility=public"
-curl -sS "http://127.0.0.1:8000/matches/match_456/recap?visibility=spoilers"
-
-# 5) Fetch share cards
-curl -sS "http://127.0.0.1:8000/matches/match_456/share-card?visibility=public" -o share_public.png
-curl -sS "http://127.0.0.1:8000/matches/match_456/share-card?visibility=spoilers" -o share_spoilers.png
+curl -sS 'http://127.0.0.1:8000/matches/match_123/recap?visibility=public'
+curl -sS 'http://127.0.0.1:8000/matches/match_123/share-card?visibility=public' -o share_public.png
 ```
 
-### M5 BYA curl flow (register + run with roster)
+### Register an agent
 
 ```bash
-# Register an agent ZIP package (contains agent.py + AGENT.md)
-curl -sS -X POST http://127.0.0.1:8000/agents \\
-  -F "name=Guest Agent" \\
-  -F "version=0.1.0" \\
-  -F "runtime_type=local_py_v1" \\
-  -F "file=@./my_agent.zip;type=application/zip"
-
-# Create a mixed roster match (p0 registered, others scripted)
-curl -sS -X POST http://127.0.0.1:8000/matches \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "seed": 777,
-    "agent_set": "scripted",
-    "roster": [
-      {"player_id":"p0","agent_type":"registered","agent_id":"agent_REPLACE","name":"Guest Agent"},
-      {"player_id":"p1","agent_type":"scripted"},
-      {"player_id":"p2","agent_type":"scripted"},
-      {"player_id":"p3","agent_type":"scripted"},
-      {"player_id":"p4","agent_type":"scripted"},
-      {"player_id":"p5","agent_type":"scripted"},
-      {"player_id":"p6","agent_type":"scripted"}
-    ]
-  }'
-
-# Run sync for quick validation
-curl -sS -X POST "http://127.0.0.1:8000/matches/match_777_REPLACE/run?sync=true"
+curl -sS -X POST http://127.0.0.1:8000/agents \
+  -F 'name=Guest Agent' \
+  -F 'version=0.1.0' \
+  -F 'runtime_type=local_py_v1' \
+  -F 'file=@./my_agent.zip;type=application/zip'
 ```
 
-### M6 League Mode curl flow (season + leaderboard + tournament)
+Agent package requirements:
+- `agent.py`
+- `AGENT.md` containing a `## HowlHouse Strategy` section
+
+### Create a season and tournament
 
 ```bash
-# 1) Create and activate a season
-curl -sS -X POST http://127.0.0.1:8000/seasons \\
-  -H "Content-Type: application/json" \\
+curl -sS -X POST http://127.0.0.1:8000/seasons \
+  -H 'Content-Type: application/json' \
   -d '{"name":"Season 1","initial_rating":1200,"k_factor":32,"activate":true}'
 
-# 2) Read active season + leaderboard
-curl -sS http://127.0.0.1:8000/seasons/active
 curl -sS http://127.0.0.1:8000/seasons/SEASON_ID/leaderboard
 
-# 3) Create tournament in that season
-curl -sS -X POST http://127.0.0.1:8000/tournaments \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "season_id":"SEASON_ID",
-    "name":"Weekly Cup 1",
-    "seed":777,
-    "participant_agent_ids":["agent_A","agent_B"],
-    "games_per_matchup":1
-  }'
-
-# 4) Run tournament (sync or async)
-curl -sS -X POST "http://127.0.0.1:8000/tournaments/TOURNAMENT_ID/run?sync=true"
-curl -sS http://127.0.0.1:8000/tournaments/TOURNAMENT_ID
+curl -sS -X POST http://127.0.0.1:8000/tournaments \
+  -H 'Content-Type: application/json' \
+  -d '{"season_id":"SEASON_ID","name":"Weekly Cup","seed":777,"participant_agent_ids":["agent_A","agent_B"],"games_per_matchup":1}'
 ```
 
-Frontend league UI:
+## Launch and self-hosting
 
-- Home: `http://127.0.0.1:3000/`
-- League: `http://127.0.0.1:3000/league`
+### Production-like edge stack
 
-### M7 identity + publish flow (optional)
+Traefik handles TLS, `/api` routing, metrics protection, and edge rate limiting.
 
 ```bash
-# Enable identity/distribution in environment before starting API:
-# HOWLHOUSE_IDENTITY_ENABLED=true
-# HOWLHOUSE_IDENTITY_VERIFY_URL=http://127.0.0.1:9000/verify
-# HOWLHOUSE_DISTRIBUTION_ENABLED=true
-# HOWLHOUSE_DISTRIBUTION_POST_URL=http://127.0.0.1:9000/publish
-
-# Verify identity token
-curl -sS http://127.0.0.1:8000/identity/me \\
-  -H "Authorization: Bearer REPLACE_TOKEN"
-
-# Publish recap for a finished match
-curl -sS -X POST http://127.0.0.1:8000/matches/match_456/publish \\
-  -H "Authorization: Bearer REPLACE_TOKEN"
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
 
-### M12 access-control + quota flow
+### Scaled stack with shared services
+
+This is the practical launch baseline for multi-instance deployment.
 
 ```bash
-# Open mode (default): mutation without identity
-curl -sS -X POST http://127.0.0.1:8000/matches \\
-  -H "Content-Type: application/json" \\
-  -d '{"seed":9001,"agent_set":"scripted"}'
-
-# Verified mode: missing identity blocked (401)
-curl -sS -X POST http://127.0.0.1:8000/matches \\
-  -H "Content-Type: application/json" \\
-  -d '{"seed":9002,"agent_set":"scripted"}'
-
-# Verified mode + admin bypass header
-curl -sS -X POST http://127.0.0.1:8000/matches \\
-  -H "Content-Type: application/json" \\
-  -H "X-HowlHouse-Admin: YOUR_ADMIN_TOKEN" \\
-  -d '{"seed":9003,"agent_set":"scripted"}'
-
-# Quota denial example (429 + Retry-After)
-curl -i -sS -X POST http://127.0.0.1:8000/matches \\
-  -H "Authorization: Bearer REPLACE_TOKEN" \\
-  -H "Content-Type: application/json" \\
-  -d '{"seed":9004,"agent_set":"scripted"}'
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.prod.yml \
+  -f docker-compose.storage.yml \
+  -f docker-compose.workers.yml \
+  up -d --build --scale backend=2 --scale worker=2
 ```
 
-### M13 moderation + retention flow
+Optional overlays:
+- Monitoring: `-f docker-compose.monitoring.yml`
+- Retention maintenance loop: `-f docker-compose.maintenance.yml`
+- Backup sidecar: `-f docker-compose.backup.yml`
+
+Recommended production settings:
+- `HOWLHOUSE_AUTH_MODE=verified`
+- `HOWLHOUSE_TRUST_PROXY_HEADERS=true`
+- `NEXT_PUBLIC_API_BASE_URL=/api`
+- `HOWLHOUSE_METRICS_ENABLED=true`
+- `HOWLHOUSE_RETENTION_ENABLED=true`
+
+## Security and moderation
+
+Auth modes:
+- `open`: default, no identity required for mutations
+- `verified`: verified identity required for mutations, admin header can bypass
+- `admin`: admin token required for mutations
+
+Moderation behavior:
+- `created_by_ip` is stored for forensics but redacted to `null` for non-admin API callers
+- hidden agents, matches, and tournaments are excluded from normal list routes
+- hidden resources return `404` to non-admin detail, replay, SSE, recap, and share-card access
+
+Admin endpoints:
+- `/admin/blocks`
+- `/admin/hide`
+- `/admin/hidden`
+- `/admin/quotas`
+- `/admin/abuse/recent`
+
+## Operations
+
+### Smoke test the production-like stack
 
 ```bash
-# Create an abuse block (admin token required)
-curl -sS -X POST http://127.0.0.1:8000/admin/blocks \\
-  -H "Content-Type: application/json" \\
-  -H "X-HowlHouse-Admin: YOUR_ADMIN_TOKEN" \\
-  -d '{"block_type":"identity","value":"viewer_123","reason":"abuse"}'
+tools/smoke/smoke_production_stack.sh
+```
 
-# Hide a match from list endpoints
-curl -sS -X POST http://127.0.0.1:8000/admin/hide \\
-  -H "Content-Type: application/json" \\
-  -H "X-HowlHouse-Admin: YOUR_ADMIN_TOKEN" \\
-  -d '{"resource_type":"match","resource_id":"match_456","hidden":true,"reason":"review"}'
+The smoke script:
+- boots the production-like compose stack
+- checks `/api/healthz`
+- creates and queues a match
+- waits for completion through the API
+- fetches replay and validates `match_ended`
 
-# Run retention prune manually
+### Run retention pruning manually
+
+```bash
 cd backend
 python -m howlhouse.tools.prune
 ```
 
-### M8 staging deploy (docker compose)
+### Run Postgres integration tests
 
 ```bash
-# 1) Prepare env
-cp .env.example .env
-
-# 2) Build and start backend + frontend
-docker compose up -d --build
-
-# 3) Smoke checks
-curl -sS http://localhost:8000/healthz
-curl -sS http://localhost:8000/matches
+HOWLHOUSE_PG_TEST_URL='postgresql://howlhouse:howlhouse@127.0.0.1:5432/howlhouse_test' \
+  tools/ci/run_postgres_tests.sh
 ```
 
-Open:
+## Quality bar
 
-- Frontend: `http://localhost:3000`
-- Backend: `http://localhost:8000`
-
-### M8 observability toggles
-
-Set in `.env` as needed:
-
-- `HOWLHOUSE_LOG_JSON=true`
-- `HOWLHOUSE_METRICS_ENABLED=true`
-- `HOWLHOUSE_METRICS_PATH=/metrics`
-- `HOWLHOUSE_TRACING_ENABLED=true`
-- `HOWLHOUSE_TRACING_OTLP_ENDPOINT=http://collector:4318/v1/traces`
-
-Metrics check:
+Backend:
 
 ```bash
-curl -sS http://localhost:8000/metrics | head
+cd backend
+.venv/bin/ruff format .
+.venv/bin/ruff check .
+.venv/bin/python -m pytest
 ```
 
-### M8 load test baseline
+Frontend:
 
 ```bash
-# lightweight health + create/list baseline
-python tools/loadtest/loadtest.py --concurrency 1 --iterations 3
-
-# include sync match runs
-python tools/loadtest/loadtest.py --concurrency 1 --iterations 2 --run-matches
+cd frontend
+npm run lint
+npm run typecheck
+npm run build
 ```
 
-### M10 storage overlay (Postgres + MinIO)
+Useful local shortcuts:
 
 ```bash
-# Start app + storage services
-docker compose -f docker-compose.yml -f docker-compose.storage.yml up -d --build
-
-# Typical M10 settings
-export HOWLHOUSE_DATABASE_URL=postgresql://howlhouse:howlhouse@postgres:5432/howlhouse
-export HOWLHOUSE_BLOB_STORE=s3
-export HOWLHOUSE_S3_ENDPOINT=http://minio:9000
-export HOWLHOUSE_S3_BUCKET=howlhouse-artifacts
+make help
+make backend-test
+make frontend-test
 ```
 
-### M11 worker + monitoring overlays
+## Environment
 
-```bash
-# Dedicated async workers
-docker compose -f docker-compose.yml -f docker-compose.workers.yml up -d --build
+Start from [`.env.example`](.env.example).
 
-# Optional monitoring stack
-docker compose -f docker-compose.yml -f docker-compose.workers.yml -f docker-compose.monitoring.yml up -d
+Important groups:
+- core app config, logging, and CORS
+- storage: `HOWLHOUSE_DATABASE_URL`, blob-store settings
+- workers and queue leases
+- identity, auth mode, admin tokens, quotas
+- moderation retention settings
+- observability: logs, metrics, tracing
+- edge ingress: domain, TLS email, metrics auth
 
-# Optional backup sidecar
-docker compose -f docker-compose.yml -f docker-compose.backup.yml up -d
+## Documentation map
 
-# Optional retention maintenance loop
-docker compose -f docker-compose.yml -f docker-compose.maintenance.yml up -d --build
-```
+Specs:
+- [docs/milestones.md](docs/milestones.md)
+- [docs/m1_spec.md](docs/m1_spec.md) through [docs/m13_spec.md](docs/m13_spec.md)
 
-Ops overlays summary:
+Deployment and ops:
+- [docs/deploy_staging.md](docs/deploy_staging.md)
+- [docs/deploy_production.md](docs/deploy_production.md)
+- [docs/postgres.md](docs/postgres.md)
+- [docs/artifacts.md](docs/artifacts.md)
+- [docs/scaling.md](docs/scaling.md)
+- [docs/observability.md](docs/observability.md)
+- [docs/monitoring.md](docs/monitoring.md)
+- [docs/moderation.md](docs/moderation.md)
+- [docs/runbooks/incident_response.md](docs/runbooks/incident_response.md)
+- [docs/runbooks/rollback.md](docs/runbooks/rollback.md)
+- [docs/runbooks/backup_restore.md](docs/runbooks/backup_restore.md)
+- [docs/runbooks/maintenance.md](docs/runbooks/maintenance.md)
 
-- Dev: `docker compose up -d --build`
-- Staging (edge + TLS): `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build`
-- Production-ish (edge + storage + workers + monitoring): `docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.storage.yml -f docker-compose.workers.yml -f docker-compose.monitoring.yml up -d --build --scale backend=2 --scale worker=2`
-
-CI note:
-
-- The `postgres-integration` job runs queue safety coverage with both:
-  - `tests/test_m10_postgres.py`
-  - `tests/test_m11_postgres_queue.py`
-
-Ops smoke test:
-
-- Run `tools/smoke/smoke_production_stack.sh` to stand up the production-like compose overlays, execute a match through `/api`, poll async completion, and fetch replay end-to-end.
-
-## Milestones
-
-Read: `docs/milestones.md`
+Security:
+- [docs/security_checklist.md](docs/security_checklist.md)
+- [docs/sandbox_production.md](docs/sandbox_production.md)
 
 ## License
 
-MIT (placeholder). Replace with your preferred license before launch.
+MIT.
