@@ -1,0 +1,24 @@
+services:
+  backup:
+    image: postgres:16
+    env_file:
+      - ./.env
+    environment:
+      HOWLHOUSE_DATABASE_URL: ${HOWLHOUSE_DATABASE_URL:-postgresql://howlhouse:howlhouse@postgres:5432/howlhouse}
+      BACKUP_INTERVAL_SECONDS: ${HOWLHOUSE_BACKUP_INTERVAL_SECONDS:-86400}
+    volumes:
+      - ./tools/backup:/scripts:ro
+      - ./backups:/backups
+      - ./replays:/replays:ro
+      - ./blob:/blob:ro
+    command:
+      - /bin/bash
+      - -lc
+      - |
+        set -euo pipefail
+        while true; do
+          /scripts/backup_postgres.sh /backups/postgres || true
+          /scripts/backup_artifacts.sh /replays /backups/artifacts /blob || true
+          sleep "${BACKUP_INTERVAL_SECONDS}"
+        done
+    restart: unless-stopped

@@ -1,0 +1,121 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: |
+          cd backend
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          pip install -e .
+      - name: Lint
+        run: |
+          cd backend
+          ruff check .
+      - name: Test
+        run: |
+          cd backend
+          pytest -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install
+        run: |
+          cd frontend
+          npm ci
+      - name: Lint
+        run: |
+          cd frontend
+          npm run lint
+      - name: Typecheck
+        run: |
+          cd frontend
+          npm run typecheck
+      - name: Build
+        run: |
+          cd frontend
+          npm run build
+
+  postgres-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: howlhouse
+          POSTGRES_USER: howlhouse
+          POSTGRES_PASSWORD: howlhouse
+        ports:
+          - 5432/tcp
+        options: >-
+          --health-cmd "pg_isready -U howlhouse -d howlhouse"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: |
+          cd backend
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          pip install -e .
+      - name: Postgres integration test
+        env:
+          HOWLHOUSE_PG_TEST_URL: postgresql://howlhouse:howlhouse@127.0.0.1:${{ job.services.postgres.ports[5432] }}/howlhouse
+        run: |
+          ./tools/ci/run_postgres_tests.sh
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build backend image
+        run: docker build -t howlhouse-backend ./backend
+      - name: Build frontend image
+        run: docker build -t howlhouse-frontend ./frontend
+      - name: Validate compose config
+        run: docker compose config
+
+  docker-optional:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: |
+          cd backend
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          pip install -e .
+      - name: Docker integration tests (optional)
+        run: |
+          cd backend
+          set +e
+          HOWLHOUSE_RUN_DOCKER_TESTS=1 pytest -q -m docker
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ] && [ "$status" -ne 5 ]; then
+            exit "$status"
+          fi

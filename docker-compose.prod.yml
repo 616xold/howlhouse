@@ -1,0 +1,86 @@
+services:
+  proxy:
+    image: traefik:v2.11
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entryPoint.to=websecure
+      - --entrypoints.web.http.redirections.entryPoint.scheme=https
+      - --entrypoints.websecure.address=:443
+      - --entrypoints.websecure.transport.respondingTimeouts.readTimeout=0
+      - --entrypoints.websecure.transport.respondingTimeouts.writeTimeout=0
+      - --entrypoints.websecure.transport.respondingTimeouts.idleTimeout=3600s
+      - --certificatesresolvers.le.acme.email=${TRAEFIK_ACME_EMAIL}
+      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.le.acme.httpchallenge=true
+      - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web
+      - --accesslog=true
+      - --log.level=INFO
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./data/traefik:/letsencrypt
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+
+  backend:
+    ports: []
+    environment:
+      HOWLHOUSE_TRUST_PROXY_HEADERS: ${HOWLHOUSE_TRUST_PROXY_HEADERS:-true}
+      HOWLHOUSE_TRUSTED_PROXY_HOPS: ${HOWLHOUSE_TRUSTED_PROXY_HOPS:-1}
+      HOWLHOUSE_METRICS_ENABLED: ${HOWLHOUSE_METRICS_ENABLED:-true}
+      HOWLHOUSE_METRICS_PATH: ${HOWLHOUSE_METRICS_PATH:-/metrics}
+    labels:
+      - traefik.enable=true
+      - "traefik.http.routers.api.rule=Host(`${HOWLHOUSE_DOMAIN}`) && PathPrefix(`/api`)"
+      - traefik.http.routers.api.entrypoints=websecure
+      - traefik.http.routers.api.tls=true
+      - traefik.http.routers.api.tls.certresolver=le
+      - traefik.http.routers.api.priority=100
+      - traefik.http.routers.api.middlewares=api-strip,api-ratelimit
+      - traefik.http.routers.api.service=backend
+      - "traefik.http.routers.api-identity.rule=Host(`${HOWLHOUSE_DOMAIN}`) && PathPrefix(`/api/identity`)"
+      - traefik.http.routers.api-identity.entrypoints=websecure
+      - traefik.http.routers.api-identity.tls=true
+      - traefik.http.routers.api-identity.tls.certresolver=le
+      - traefik.http.routers.api-identity.priority=110
+      - traefik.http.routers.api-identity.middlewares=api-strip,api-identity-ratelimit
+      - traefik.http.routers.api-identity.service=backend
+      - "traefik.http.routers.metrics.rule=Host(`${HOWLHOUSE_DOMAIN}`) && Path(`/metrics`)"
+      - traefik.http.routers.metrics.entrypoints=websecure
+      - traefik.http.routers.metrics.tls=true
+      - traefik.http.routers.metrics.tls.certresolver=le
+      - traefik.http.routers.metrics.priority=120
+      - traefik.http.routers.metrics.middlewares=metrics-auth
+      - traefik.http.routers.metrics.service=backend
+      - traefik.http.middlewares.api-strip.stripprefix.prefixes=/api
+      - traefik.http.middlewares.api-ratelimit.ratelimit.average=20
+      - traefik.http.middlewares.api-ratelimit.ratelimit.burst=40
+      - traefik.http.middlewares.api-identity-ratelimit.ratelimit.average=5
+      - traefik.http.middlewares.api-identity-ratelimit.ratelimit.burst=10
+      - "traefik.http.middlewares.metrics-auth.basicauth.users=${TRAEFIK_METRICS_BASIC_AUTH}"
+      - traefik.http.services.backend.loadbalancer.server.port=8000
+      - traefik.http.services.backend.loadbalancer.responseforwarding.flushinterval=100ms
+
+  frontend:
+    ports: []
+    build:
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-/api}
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-/api}
+    labels:
+      - traefik.enable=true
+      - "traefik.http.routers.frontend.rule=Host(`${HOWLHOUSE_DOMAIN}`)"
+      - traefik.http.routers.frontend.entrypoints=websecure
+      - traefik.http.routers.frontend.tls=true
+      - traefik.http.routers.frontend.tls.certresolver=le
+      - traefik.http.routers.frontend.priority=1
+      - traefik.http.services.frontend.loadbalancer.server.port=3000

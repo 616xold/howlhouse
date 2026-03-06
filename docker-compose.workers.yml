@@ -1,0 +1,35 @@
+services:
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: ["python", "-m", "howlhouse.worker.main"]
+    env_file:
+      - ./.env
+    environment:
+      HOWLHOUSE_DATABASE_URL: ${HOWLHOUSE_DATABASE_URL:-sqlite:///./data/howlhouse.db}
+      HOWLHOUSE_DATA_DIR: ${HOWLHOUSE_DATA_DIR:-./data}
+      HOWLHOUSE_BLOB_STORE: ${HOWLHOUSE_BLOB_STORE:-local}
+      HOWLHOUSE_BLOB_BASE_DIR: ${HOWLHOUSE_BLOB_BASE_DIR:-./blob}
+      HOWLHOUSE_S3_ENDPOINT: ${HOWLHOUSE_S3_ENDPOINT:-}
+      HOWLHOUSE_S3_REGION: ${HOWLHOUSE_S3_REGION:-us-east-1}
+      HOWLHOUSE_S3_BUCKET: ${HOWLHOUSE_S3_BUCKET:-}
+      HOWLHOUSE_S3_ACCESS_KEY: ${HOWLHOUSE_S3_ACCESS_KEY:-}
+      HOWLHOUSE_S3_SECRET_KEY: ${HOWLHOUSE_S3_SECRET_KEY:-}
+      HOWLHOUSE_S3_PREFIX: ${HOWLHOUSE_S3_PREFIX:-}
+      HOWLHOUSE_WORKER_CONCURRENCY: ${HOWLHOUSE_WORKER_CONCURRENCY:-1}
+      HOWLHOUSE_WORKER_POLL_INTERVAL_MS: ${HOWLHOUSE_WORKER_POLL_INTERVAL_MS:-500}
+      HOWLHOUSE_WORKER_LEASE_SECONDS: ${HOWLHOUSE_WORKER_LEASE_SECONDS:-30}
+      HOWLHOUSE_WORKER_STALE_AFTER_SECONDS: ${HOWLHOUSE_WORKER_STALE_AFTER_SECONDS:-120}
+      HOWLHOUSE_WORKER_METRICS_ENABLED: ${HOWLHOUSE_WORKER_METRICS_ENABLED:-true}
+      HOWLHOUSE_WORKER_METRICS_PORT: ${HOWLHOUSE_WORKER_METRICS_PORT:-9100}
+    expose:
+      - "${HOWLHOUSE_WORKER_METRICS_PORT:-9100}"
+    volumes:
+      - ./data:/app/data
+      - ./replays:/app/replays
+      - ./blob:/app/blob
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy

@@ -1,0 +1,26 @@
+services:
+  maintenance:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command:
+      - /bin/sh
+      - -c
+      - |
+        while true; do
+          python -m howlhouse.tools.prune
+          sleep ${HOWLHOUSE_MAINTENANCE_INTERVAL_SECONDS:-86400}
+        done
+    env_file:
+      - ./.env
+    environment:
+      HOWLHOUSE_DATABASE_URL: ${HOWLHOUSE_DATABASE_URL:-sqlite:///./data/howlhouse.db}
+      HOWLHOUSE_RETENTION_ENABLED: ${HOWLHOUSE_RETENTION_ENABLED:-true}
+      HOWLHOUSE_RETENTION_USAGE_EVENTS_DAYS: ${HOWLHOUSE_RETENTION_USAGE_EVENTS_DAYS:-30}
+      HOWLHOUSE_RETENTION_JOBS_DAYS: ${HOWLHOUSE_RETENTION_JOBS_DAYS:-14}
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
