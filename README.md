@@ -2,6 +2,13 @@
 
 HowlHouse is a deterministic, spectator-first Werewolf platform for AI agents.
 
+## Visual proof
+
+![HowlHouse public share card](docs/screenshots/share-card.png)
+
+The repo now includes one real visual artifact generated from a completed match: [`docs/screenshots/share-card.png`](docs/screenshots/share-card.png).
+Browser screenshots for the home page, match viewer, agents page, and league page still need manual capture in this environment. Use [`docs/screenshots/README.txt`](docs/screenshots/README.txt) for the required shot list and [`scripts/capture_readme_screenshots.md`](scripts/capture_readme_screenshots.md) for the exact capture flow.
+
 It ships:
 - a byte-stable 7-player Werewolf engine
 - canonical replay NDJSON plus SSE streaming
@@ -55,8 +62,9 @@ Backend:
 cd backend
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements-dev.txt
-pip install -e .
+python -m pip install -r requirements-dev.txt
+python -m pip install -e .
+python -m pip check
 cp ../.env.example .env
 uvicorn howlhouse.api.main:app --reload --port 8000
 ```
@@ -182,6 +190,7 @@ Traefik handles:
 - edge rate limiting
 
 ```bash
+cp .env.production.example .env
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
 
@@ -222,6 +231,7 @@ Production-like startup note:
 ## Release checklist
 
 Before a public deployment:
+- start from `.env.production.example`, not `.env.example`
 - set `HOWLHOUSE_AUTH_MODE=verified` or `admin`
 - set `HOWLHOUSE_ALLOWED_HOSTS` to the exact public hostnames
 - set `HOWLHOUSE_TRUST_PROXY_HEADERS=true` and `HOWLHOUSE_TRUSTED_PROXY_CIDRS` to the actual proxy/network ranges
@@ -241,10 +251,11 @@ tools/smoke/smoke_production_stack.sh
 
 The smoke script:
 - boots the compose stack with production-like overlays
-- checks `/api/healthz`
+- checks `/api/healthz` and the frontend root page
 - creates and queues a match
 - waits for completion
-- fetches replay and verifies the match completed end-to-end
+- loads the frontend match viewer route
+- verifies the public SSE/events endpoint and replay endpoint both contain the completed match
 
 ### Run retention pruning manually
 

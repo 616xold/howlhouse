@@ -1,9 +1,10 @@
+# Constraints must only pin base packages. Keep extras in requirements or pyproject deps.
 fastapi==0.135.1
-uvicorn[standard]==0.41.0
+uvicorn==0.41.0
 pydantic==2.12.5
 pydantic-settings==2.13.1
 SQLAlchemy==2.0.48
-psycopg[binary]==3.3.3
+psycopg==3.3.3
 boto3==1.42.62
 pillow==12.1.1
 python-multipart==0.0.22
@@ -15,6 +16,6 @@ opentelemetry-instrumentation-fastapi==0.60b1
 pytest==9.0.2
 ruff==0.15.4
 httpx==0.28.1
-moto[s3]==5.1.21
+moto==5.1.21
 setuptools==82.0.0
 wheel==0.46.3

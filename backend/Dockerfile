@@ -8,8 +8,8 @@ WORKDIR /app
 
 COPY constraints.txt pyproject.toml README.md ./
 COPY howlhouse ./howlhouse
-RUN pip install --upgrade pip setuptools wheel \
-    && pip wheel --no-cache-dir --wheel-dir /wheels -c constraints.txt .
+RUN python -m pip install --upgrade pip setuptools wheel \
+    && python -m pip wheel --no-cache-dir --wheel-dir /wheels -c constraints.txt .
 
 FROM python:3.11.11-slim-bookworm AS runner
 
@@ -21,8 +21,10 @@ WORKDIR /app
 
 COPY constraints.txt ./
 COPY --from=builder /wheels /wheels
-RUN pip install --upgrade pip \
-    && pip install --no-cache-dir -c constraints.txt /wheels/*
+RUN python -m pip install --upgrade pip \
+    && python -m pip install --no-cache-dir -c constraints.txt /wheels/* \
+    && python -m pip check \
+    && python -c "import fastapi, pydantic, sqlalchemy"
 
 COPY howlhouse ./howlhouse
 

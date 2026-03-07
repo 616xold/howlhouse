@@ -16,8 +16,13 @@ jobs:
         run: |
           cd backend
           python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
-          pip install -e .
+          python -m pip install -r requirements-dev.txt
+          python -m pip install -e .
+      - name: Packaging sanity
+        run: |
+          cd backend
+          python -m pip check
+          python -c "import fastapi, pydantic, sqlalchemy"
       - name: Lint
         run: |
           cd backend
@@ -76,8 +81,13 @@ jobs:
         run: |
           cd backend
           python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
-          pip install -e .
+          python -m pip install -r requirements-dev.txt
+          python -m pip install -e .
+      - name: Packaging sanity
+        run: |
+          cd backend
+          python -m pip check
+          python -c "import fastapi, pydantic, sqlalchemy"
       - name: Postgres integration test
         env:
           HOWLHOUSE_PG_TEST_URL: postgresql://howlhouse:howlhouse@127.0.0.1:${{ job.services.postgres.ports[5432] }}/howlhouse
@@ -110,8 +120,13 @@ jobs:
         run: |
           cd backend
           python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
-          pip install -e .
+          python -m pip install -r requirements-dev.txt
+          python -m pip install -e .
+      - name: Packaging sanity
+        run: |
+          cd backend
+          python -m pip check
+          python -c "import fastapi, pydantic, sqlalchemy"
       - name: Docker integration tests (optional)
         run: |
           echo "Docker version:"

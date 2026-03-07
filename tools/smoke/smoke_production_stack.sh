@@ -105,6 +105,32 @@ if [[ "${status}" != "finished" ]]; then
   exit 1
 fi
 
+echo "[smoke] checking frontend viewer"
+wait_for_200 "${frontend_url}matches/${match_id}" "match viewer"
+
+echo "[smoke] fetching public event stream"
+events_file="$(mktemp)"
+curl "${CURL_COMMON[@]}" "${api_url}/matches/${match_id}/events?visibility=public" >"${events_file}"
+python3 - <<'PY' "${events_file}"
+import json
+import sys
+
+path = sys.argv[1]
+events = []
+with open(path, "r", encoding="utf-8") as fh:
+    for raw_line in fh:
+        line = raw_line.strip()
+        if not line.startswith("data: "):
+            continue
+        events.append(json.loads(line[6:]))
+if not events:
+    raise SystemExit("empty event stream")
+if not any(evt.get("type") == "match_ended" for evt in events):
+    raise SystemExit("event stream missing match_ended")
+print(f"[smoke] public event stream events={len(events)}")
+PY
+rm -f "${events_file}"
+
 echo "[smoke] fetching replay"
 replay_file="$(mktemp)"
 curl "${CURL_COMMON[@]}" "${api_url}/matches/${match_id}/replay?visibility=all" >"${replay_file}"
