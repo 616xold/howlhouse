@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { fetchJson } from "../lib/api";
+import { formatDateTime, formatStatusLabel, formatShortId } from "../lib/format";
 import type { LeaderboardResponse, SeasonRecord } from "../lib/types";
 
 interface SeasonDetailClientProps {
@@ -31,65 +32,126 @@ export function SeasonDetailClient({ seasonId }: SeasonDetailClientProps) {
   }, [seasonId]);
 
   useEffect(() => {
-    load();
-    const interval = setInterval(load, 5000);
+    void load();
+    const interval = setInterval(() => {
+      void load();
+    }, 5000);
     return () => clearInterval(interval);
   }, [load]);
 
-  return (
-    <main className="page-shell">
-      <section className="card">
-        <p className="muted">
-          <Link href="/league">← Back to league</Link>
-        </p>
-        <h1>{season?.name ?? seasonId}</h1>
-        {season ? (
-          <p className="muted">
-            status: {season.status} · initial rating: {season.initial_rating} · k-factor: {season.k_factor}
-          </p>
-        ) : null}
-        {error ? <p className="error-text">{error}</p> : null}
-      </section>
+  const topEntries = useMemo(() => leaderboard?.entries.slice(0, 3) ?? [], [leaderboard?.entries]);
 
-      <section className="card">
-        <h2>Leaderboard</h2>
-        {!leaderboard ? <p className="muted">Loading leaderboard...</p> : null}
-        {leaderboard && leaderboard.entries.length === 0 ? (
-          <p className="muted">No entries yet.</p>
-        ) : null}
-        {leaderboard && leaderboard.entries.length > 0 ? (
-          <div className="table-wrap">
-            <table className="matches-table">
-              <thead>
-                <tr>
-                  <th>Rank</th>
-                  <th>Agent</th>
-                  <th>Rating</th>
-                  <th>Games</th>
-                  <th>Wins</th>
-                  <th>Losses</th>
-                </tr>
-              </thead>
-              <tbody>
-                {leaderboard.entries.map((entry) => (
-                  <tr key={entry.agent_id}>
-                    <td>{entry.rank}</td>
-                    <td>
-                      <Link href={`/league/seasons/${seasonId}/agents/${entry.agent_id}`}>
-                        {entry.name}
-                      </Link>
-                    </td>
-                    <td>{entry.rating.toFixed(2)}</td>
-                    <td>{entry.games}</td>
-                    <td>{entry.wins}</td>
-                    <td>{entry.losses}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+  return (
+    <main className="page-shell page-stack">
+      <section className="page-banner">
+        <div className="section-heading">
+          <p className="breadcrumb">
+            <Link href="/league">League</Link>
+            <span>/</span>
+            <span>{season?.name ?? formatShortId(seasonId, 10, 8)}</span>
+          </p>
+          <span className="eyebrow">Season detail</span>
+          <h1>{season?.name ?? "Season"}</h1>
+          <p className="section-copy">
+            Review season configuration, active ladder data, and agent standings tied to this deterministic rating window.
+          </p>
+        </div>
+
+        {season ? (
+          <div className="metrics-grid metrics-grid-compact">
+            <article className="stat-card">
+              <span className="stat-label">Status</span>
+              <strong className="stat-value">{formatStatusLabel(season.status)}</strong>
+              <span className="stat-meta">{formatDateTime(season.updated_at)}</span>
+            </article>
+            <article className="stat-card">
+              <span className="stat-label">Initial rating</span>
+              <strong className="stat-value">{season.initial_rating}</strong>
+              <span className="stat-meta">Starting Elo baseline</span>
+            </article>
+            <article className="stat-card">
+              <span className="stat-label">K-factor</span>
+              <strong className="stat-value">{season.k_factor}</strong>
+              <span className="stat-meta">Rating volatility</span>
+            </article>
+            <article className="stat-card">
+              <span className="stat-label">Entries</span>
+              <strong className="stat-value">{leaderboard?.entries.length ?? 0}</strong>
+              <span className="stat-meta">Agents on the ladder</span>
+            </article>
           </div>
         ) : null}
       </section>
+
+      {error ? (
+        <div className="message-banner message-banner-error" role="alert">
+          {error}
+        </div>
+      ) : null}
+
+      {!leaderboard ? (
+        <section className="panel skeleton-card">
+          <div className="skeleton-line skeleton-line-short" />
+          <div className="skeleton-line" />
+          <div className="skeleton-line" />
+        </section>
+      ) : null}
+
+      {leaderboard && leaderboard.entries.length === 0 ? (
+        <div className="empty-state">
+          <div className="empty-state-art" aria-hidden="true" />
+          <div>
+            <h3>No entries yet</h3>
+            <p className="muted">Run league matches to start populating this season’s leaderboard.</p>
+          </div>
+        </div>
+      ) : null}
+
+      {leaderboard && leaderboard.entries.length > 0 ? (
+        <>
+          <section className="podium-grid">
+            {topEntries.map((entry) => (
+              <article key={entry.agent_id} className="podium-card">
+                <span className="meta-pill meta-pill-accent">#{entry.rank}</span>
+                <h3>{entry.name}</h3>
+                <p className="mono-small">{entry.version}</p>
+                <strong className="podium-value">{entry.rating.toFixed(2)}</strong>
+                <p className="muted">
+                  {entry.games} games · {entry.wins}W / {entry.losses}L
+                </p>
+              </article>
+            ))}
+          </section>
+
+          <section className="panel panel-strong">
+            <div className="section-heading">
+              <span className="eyebrow">Leaderboard</span>
+              <h2>Full standings</h2>
+            </div>
+
+            <div className="leaderboard-list">
+              {leaderboard.entries.map((entry) => (
+                <div key={entry.agent_id} className="leaderboard-row">
+                  <div className="leaderboard-row-main">
+                    <span className="leaderboard-rank">#{entry.rank}</span>
+                    <div>
+                      <Link href={`/league/seasons/${seasonId}/agents/${entry.agent_id}`}>{entry.name}</Link>
+                      <p className="muted">
+                        {entry.version} · {entry.games} games
+                      </p>
+                    </div>
+                  </div>
+                  <div className="leaderboard-row-stats">
+                    <span>{entry.rating.toFixed(2)}</span>
+                    <span>{entry.wins}W</span>
+                    <span>{entry.losses}L</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        </>
+      ) : null}
     </main>
   );
 }

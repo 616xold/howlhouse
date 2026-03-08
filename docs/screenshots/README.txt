@@ -1,12 +1,12 @@
 HowlHouse README screenshot checklist
 
 Current status
-- Included now: share-card.png (generated from a real scripted match)
-- Still needed from a browser session:
+- Included now:
   - match-list.png
   - match-viewer.png
   - agents.png
   - league.png
+  - share-card.png
 
 Capture targets
 - match-list.png: http://localhost:3000/ with at least one finished match in the table
@@ -19,7 +19,7 @@ Capture settings
 - Desktop viewport: 1440x900
 - Browser zoom: 100%
 - Format: PNG
-- Prefer a clean light theme with no browser sidebars or bookmarks shown
+- Prefer the shipped dark product theme with no browser sidebars or bookmarks shown
 - Keep captions readable and crop to the app content without cutting route context
 
 Save files into this directory with the exact filenames above.

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { fetchJson } from "../lib/api";
+import { formatDateTime, formatStatusLabel, formatShortId } from "../lib/format";
 import type { PublicTournamentRecord } from "../lib/types";
 
 interface TournamentDetailClientProps {
@@ -26,14 +27,16 @@ export function TournamentDetailClient({ tournamentId }: TournamentDetailClientP
   }, [tournamentId]);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
   useEffect(() => {
     if (tournament?.status !== "running") {
       return;
     }
-    const interval = setInterval(load, 2500);
+    const interval = setInterval(() => {
+      void load();
+    }, 2500);
     return () => clearInterval(interval);
   }, [load, tournament?.status]);
 
@@ -41,12 +44,9 @@ export function TournamentDetailClient({ tournamentId }: TournamentDetailClientP
     setRunning(true);
     setError(null);
     try {
-      const updated = await fetchJson<PublicTournamentRecord>(
-        `/tournaments/${tournamentId}/run?sync=false`,
-        {
-          method: "POST"
-        }
-      );
+      const updated = await fetchJson<PublicTournamentRecord>(`/tournaments/${tournamentId}/run?sync=false`, {
+        method: "POST"
+      });
       setTournament(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start tournament");
@@ -61,64 +61,125 @@ export function TournamentDetailClient({ tournamentId }: TournamentDetailClientP
   );
 
   return (
-    <main className="page-shell">
-      <section className="card">
-        <p className="muted">
-          <Link href="/league">← Back to league</Link>
-        </p>
-        <h1>{tournament?.name ?? tournamentId}</h1>
-        <p className="muted">
-          status: {tournament?.status ?? "loading"} · champion: {tournament?.champion_agent_id ?? "-"}
-        </p>
-        {canRun ? (
-          <button type="button" onClick={runTournament} disabled={running}>
-            {running ? "Starting..." : "Run Tournament"}
-          </button>
-        ) : null}
-        {error ? <p className="error-text">{error}</p> : null}
-      </section>
+    <main className="page-shell page-stack">
+      <section className="page-banner">
+        <div className="section-heading">
+          <p className="breadcrumb">
+            <Link href="/league">League</Link>
+            <span>/</span>
+            <span>{tournament?.name ?? formatShortId(tournamentId, 10, 8)}</span>
+          </p>
+          <span className="eyebrow">Tournament detail</span>
+          <h1>{tournament?.name ?? "Tournament bracket"}</h1>
+          <p className="section-copy">
+            Follow the bracket, jump to completed game viewers, and keep tournament execution tied to the same backend job flow.
+          </p>
+        </div>
 
-      <section className="card">
-        <h2>Bracket</h2>
-        {!tournament ? <p className="muted">Loading bracket...</p> : null}
         {tournament ? (
-          <div className="bracket-wrap">
-            {tournament.bracket.rounds.map((round) => (
-              <section className="round-column" key={`round-${round.round}`}>
-                <h3>Round {round.round}</h3>
-                <ul className="compact-list">
-                  {round.matchups.map((matchup) => (
-                    <li key={matchup.matchup_id} className="matchup-card">
-                      <p className="mono-small">{matchup.matchup_id}</p>
-                      <p>
-                        {matchup.agent_a ?? "TBD"} vs {matchup.agent_b ?? "BYE"}
-                      </p>
-                      <p className="muted">winner: {matchup.winner_agent_id ?? "TBD"}</p>
-                      {matchup.games.length > 0 ? (
-                        <ul className="compact-list">
-                          {matchup.games.map((game) => (
-                            <li key={`${matchup.matchup_id}-g${game.game_index}`}>
-                              game {game.game_index}: {game.winner_agent_id ?? "TBD"}
-                              {game.match_id ? (
-                                <>
-                                  {" "}
-                                  <Link href={`/matches/${game.match_id}`}>{game.match_id}</Link>
-                                </>
-                              ) : null}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="muted">No games recorded for this matchup.</p>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ))}
+          <div className="metrics-grid metrics-grid-compact">
+            <article className="stat-card">
+              <span className="stat-label">Status</span>
+              <strong className="stat-value">{formatStatusLabel(tournament.status)}</strong>
+              <span className="stat-meta">{formatDateTime(tournament.updated_at)}</span>
+            </article>
+            <article className="stat-card">
+              <span className="stat-label">Champion</span>
+              <strong className="stat-value">{tournament.champion_agent_id ?? "TBD"}</strong>
+              <span className="stat-meta">Resolved from the bracket record</span>
+            </article>
+            <article className="stat-card">
+              <span className="stat-label">Rounds</span>
+              <strong className="stat-value">{tournament.bracket.rounds.length}</strong>
+              <span className="stat-meta">Seed {tournament.seed}</span>
+            </article>
           </div>
         ) : null}
       </section>
+
+      {canRun ? (
+        <section className="panel panel-strong">
+          <div className="section-heading section-heading-row">
+            <div>
+              <span className="eyebrow">Execution</span>
+              <h2>Run this tournament</h2>
+            </div>
+            <button type="button" className="button-primary" onClick={() => void runTournament()} disabled={running}>
+              {running ? "Starting..." : "Run tournament"}
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      {error ? (
+        <div className="message-banner message-banner-error" role="alert">
+          {error}
+        </div>
+      ) : null}
+
+      {!tournament ? (
+        <section className="panel skeleton-card">
+          <div className="skeleton-line skeleton-line-short" />
+          <div className="skeleton-line" />
+          <div className="skeleton-line" />
+        </section>
+      ) : null}
+
+      {tournament ? (
+        <section className="panel panel-strong">
+          <div className="section-heading">
+            <span className="eyebrow">Bracket</span>
+            <h2>Round-by-round view</h2>
+          </div>
+
+          <div className="bracket-wrap">
+            {tournament.bracket.rounds.map((round) => (
+              <section className="round-column" key={`round-${round.round}`}>
+                <div className="section-heading">
+                  <span className="eyebrow">Round {round.round}</span>
+                  <h3>{round.matchups.length} matchup(s)</h3>
+                </div>
+
+                <div className="matchup-stack">
+                  {round.matchups.map((matchup) => (
+                    <article key={matchup.matchup_id} className="matchup-card">
+                      <div className="agent-card-top">
+                        <div>
+                          <strong>{matchup.agent_a ?? "TBD"}</strong>
+                          <p className="muted">vs {matchup.agent_b ?? "BYE"}</p>
+                        </div>
+                        <span className="meta-pill">
+                          Winner {matchup.winner_agent_id ?? "TBD"}
+                        </span>
+                      </div>
+
+                      <p className="mono-small">{formatShortId(matchup.matchup_id, 10, 8)}</p>
+
+                      {matchup.games.length > 0 ? (
+                        <div className="game-chip-grid">
+                          {matchup.games.map((game) => (
+                            <div key={`${matchup.matchup_id}-g${game.game_index}`} className="game-chip">
+                              <span>Game {game.game_index}</span>
+                              <span className="muted">{game.winner_agent_id ?? "TBD"}</span>
+                              {game.match_id ? (
+                                <Link href={`/matches/${game.match_id}`} className="button-link button-link-subtle">
+                                  Open match
+                                </Link>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="muted">No games recorded for this matchup yet.</p>
+                      )}
+                    </article>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </main>
   );
 }

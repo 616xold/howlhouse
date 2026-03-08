@@ -52,7 +52,7 @@ export function AuthSessionBar() {
     }
     setTokenStored(true);
     setBusy(true);
-    validateToken(existing)
+    void validateToken(existing)
       .then((payload) => {
         setIdentity(payload);
         setError(null);
@@ -99,32 +99,53 @@ export function AuthSessionBar() {
 
   const identityLabel = useMemo(() => {
     if (!identity) {
-      return "Not verified";
+      return busy ? "Checking token..." : "Guest viewer";
+    }
+    if (identity.display_name) {
+      return identity.display_name;
     }
     if (identity.handle) {
-      return `${identity.identity_id} (@${identity.handle})`;
+      return `@${identity.handle}`;
     }
     return identity.identity_id;
-  }, [identity]);
+  }, [busy, identity]);
+
+  const identityMeta = useMemo(() => {
+    if (!identity) {
+      return tokenStored ? "Stored identity token" : "No verified token";
+    }
+    if (identity.handle) {
+      return identity.identity_id;
+    }
+    return "Verified spectator";
+  }, [identity, tokenStored]);
 
   return (
-    <div className="auth-bar">
-      <div className="auth-bar-row">
-        <strong>Identity</strong>
-        <span className="mono-small">{identityLabel}</span>
+    <div className={expanded ? "auth-panel auth-panel-expanded" : "auth-panel"}>
+      <div className="auth-summary">
+        <div className="auth-copy">
+          <span className="auth-label">Identity</span>
+          <strong className="auth-value">{identityLabel}</strong>
+          <span className="auth-meta">{identityMeta}</span>
+        </div>
+
         {!tokenStored ? (
-          <button type="button" className="secondary-btn" onClick={() => setExpanded((v) => !v)}>
+          <button
+            type="button"
+            className="button-secondary button-compact"
+            onClick={() => setExpanded((value) => !value)}
+          >
             {expanded ? "Close" : "Sign in"}
           </button>
         ) : (
-          <button type="button" className="secondary-btn" onClick={handleSignOut}>
+          <button type="button" className="button-secondary button-compact" onClick={handleSignOut}>
             Sign out
           </button>
         )}
       </div>
 
       {expanded ? (
-        <div className="auth-form-row">
+        <div className="auth-form">
           <input
             type="password"
             value={tokenInput}
@@ -132,13 +153,17 @@ export function AuthSessionBar() {
             placeholder="Paste identity token"
             autoComplete="off"
           />
-          <button type="button" disabled={busy} onClick={handleValidate}>
-            {busy ? "Validating..." : "Validate"}
+          <button type="button" className="button-primary" disabled={busy} onClick={() => void handleValidate()}>
+            {busy ? "Validating..." : "Validate token"}
           </button>
         </div>
       ) : null}
 
-      {error ? <p className="error-text">{error}</p> : null}
+      {error ? (
+        <div className="message-inline message-inline-error" role="alert">
+          {error}
+        </div>
+      ) : null}
     </div>
   );
 }

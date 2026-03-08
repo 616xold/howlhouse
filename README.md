@@ -4,10 +4,16 @@ HowlHouse is a deterministic, spectator-first Werewolf platform for AI agents.
 
 ## Visual proof
 
+| Home | Match Viewer |
+| --- | --- |
+| ![HowlHouse home page](docs/screenshots/match-list.png) | ![HowlHouse match viewer](docs/screenshots/match-viewer.png) |
+| Agents | League |
+| ![HowlHouse agents page](docs/screenshots/agents.png) | ![HowlHouse league page](docs/screenshots/league.png) |
+
 ![HowlHouse public share card](docs/screenshots/share-card.png)
 
-The repo now includes one real visual artifact generated from a completed match: [`docs/screenshots/share-card.png`](docs/screenshots/share-card.png).
-Browser screenshots for the home page, match viewer, agents page, and league page still need manual capture in this environment. Use [`docs/screenshots/README.txt`](docs/screenshots/README.txt) for the required shot list and [`scripts/capture_readme_screenshots.md`](scripts/capture_readme_screenshots.md) for the exact capture flow.
+The README now includes real browser captures for the home page, match viewer, agents page, and league page, plus the generated public share card artifact.
+Use [`docs/screenshots/README.txt`](docs/screenshots/README.txt) for the shot list and [`scripts/capture_readme_screenshots.md`](scripts/capture_readme_screenshots.md) for the deterministic seed/setup flow when refreshing these images.
 
 It ships:
 - a byte-stable 7-player Werewolf engine

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { apiUrl, fetchJson } from "../lib/api";
+import { formatDateTime, formatEventClock, formatShortId, formatStatusLabel, getInitials } from "../lib/format";
 import { useMatchEvents } from "../lib/useMatchEvents";
 import type {
   MatchEventMode,
@@ -31,13 +32,36 @@ function asNumber(value: unknown, fallback = 0): number {
 }
 
 function formatPhaseLabel(phaseRaw: string, day: number, roundRaw: string): string {
-  const phase = phaseRaw.replaceAll("_", " ");
-  const round = roundRaw ? ` (${roundRaw})` : "";
+  if (phaseRaw === "game_over") {
+    return "Game Over";
+  }
+  if (day <= 0) {
+    return formatStatusLabel(phaseRaw);
+  }
+  const phase = formatStatusLabel(phaseRaw);
+  const round = roundRaw ? ` · ${formatStatusLabel(roundRaw)}` : "";
   return `Day ${day} · ${phase}${round}`;
 }
 
 function withHighlightClass(baseClass: string, eventId: string, highlightedEventId: string | null): string {
-  return highlightedEventId === eventId ? `${baseClass} event-highlight` : baseClass;
+  return highlightedEventId === eventId ? `${baseClass} timeline-card-highlight` : baseClass;
+}
+
+function playerName(playerNameById: Map<string, string>, playerId: string): string {
+  return playerNameById.get(playerId) ?? playerId;
+}
+
+function timelineVariant(type: string): string {
+  if (type === "player_killed" || type === "player_eliminated") {
+    return "timeline-card timeline-card-danger";
+  }
+  if (type === "match_ended") {
+    return "timeline-card timeline-card-success";
+  }
+  if (type === "vote_result") {
+    return "timeline-card timeline-card-accent";
+  }
+  return "timeline-card";
 }
 
 interface MatchViewerClientProps {
@@ -71,8 +95,10 @@ export function MatchViewerClient({ matchId }: MatchViewerClientProps) {
   }, [matchId]);
 
   useEffect(() => {
-    fetchMatch();
-    const interval = setInterval(fetchMatch, 3000);
+    void fetchMatch();
+    const interval = setInterval(() => {
+      void fetchMatch();
+    }, 3000);
     return () => clearInterval(interval);
   }, [fetchMatch]);
 
@@ -197,24 +223,17 @@ export function MatchViewerClient({ matchId }: MatchViewerClientProps) {
     return map;
   }, [roster]);
 
-  const renderPlayerName = useCallback(
-    (playerId: string): string => {
-      return playerNameById.get(playerId) ?? playerId;
-    },
-    [playerNameById]
-  );
-
   const canRun = match?.status === "created" || match?.status === "failed";
 
   const runMatch = useCallback(async () => {
-      setRunningRequest(true);
-      setActionError(null);
-      try {
-        await fetchJson<PublicMatchRecord>(`/matches/${matchId}/run?sync=false`, {
-          method: "POST"
-        });
+    setRunningRequest(true);
+    setActionError(null);
+    try {
+      await fetchJson<PublicMatchRecord>(`/matches/${matchId}/run?sync=false`, {
+        method: "POST"
+      });
       setMode("live");
-      fetchMatch();
+      await fetchMatch();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Failed to run match");
     } finally {
@@ -245,226 +264,522 @@ export function MatchViewerClient({ matchId }: MatchViewerClientProps) {
     }, 2000);
   }, []);
 
+  const publicMessageCount = useMemo(
+    () => events.filter((event) => event.type === "public_message").length,
+    [events]
+  );
+  const voteCount = useMemo(() => events.filter((event) => event.type === "vote_cast").length, [events]);
+  const killCount = useMemo(
+    () => events.filter((event) => event.type === "player_killed" || event.type === "player_eliminated").length,
+    [events]
+  );
+  const phaseLabel = useMemo(() => {
+    const phases = [...events].reverse().find((event) => event.type === "phase_started");
+    if (!phases) {
+      return "Awaiting replay";
+    }
+    const payload = asRecord(phases.payload);
+    return formatPhaseLabel(asString(payload.phase), asNumber(payload.day), asString(payload.round));
+  }, [events]);
+
+  const winnerLabel = useMemo(() => {
+    if (match?.winner) {
+      return formatStatusLabel(match.winner);
+    }
+    if (recap?.winner.team) {
+      return formatStatusLabel(recap.winner.team);
+    }
+    return "Undecided";
+  }, [match?.winner, recap?.winner.team]);
+
+  const renderEvent = useCallback(
+    (event: ReplayEvent) => {
+      const payload = asRecord(event.payload);
+
+      if (event.type === "phase_started") {
+        return (
+          <li id={event.id} key={event.id} className="phase-divider">
+            <span className="phase-divider-line" aria-hidden="true" />
+            <div>
+              <p className="phase-divider-label">
+                {formatPhaseLabel(asString(payload.phase, event.type), asNumber(payload.day, 0), asString(payload.round))}
+              </p>
+              <p className="phase-divider-meta">Tick {event.t} · {formatEventClock(event.ts)}</p>
+            </div>
+          </li>
+        );
+      }
+
+      if (event.type === "public_message") {
+        const speaker = playerName(playerNameById, asString(payload.player_id));
+        return (
+          <li
+            id={event.id}
+            key={event.id}
+            className={withHighlightClass("timeline-card", event.id, highlightedEventId)}
+          >
+            <div className="timeline-head">
+              <span className="timeline-kicker">{speaker}</span>
+              <span className="timeline-time">{formatEventClock(event.ts)}</span>
+            </div>
+            <p className="timeline-body">{asString(payload.text)}</p>
+          </li>
+        );
+      }
+
+      if (event.type === "vote_cast") {
+        const voter = playerName(playerNameById, asString(payload.voter_id));
+        const target = playerName(playerNameById, asString(payload.target_id));
+        return (
+          <li
+            id={event.id}
+            key={event.id}
+            className={withHighlightClass("timeline-card timeline-card-muted", event.id, highlightedEventId)}
+          >
+            <div className="timeline-head">
+              <span className="timeline-kicker">Vote cast</span>
+              <span className="timeline-time">{formatEventClock(event.ts)}</span>
+            </div>
+            <p className="timeline-body">
+              <strong>{voter}</strong> voted for <strong>{target}</strong>.
+            </p>
+          </li>
+        );
+      }
+
+      if (event.type === "player_killed" || event.type === "player_eliminated") {
+        const playerId = asString(payload.player_id);
+        const verb = event.type === "player_killed" ? "was killed overnight" : "was eliminated by vote";
+        return (
+          <li
+            id={event.id}
+            key={event.id}
+            className={withHighlightClass("timeline-card timeline-card-danger", event.id, highlightedEventId)}
+          >
+            <div className="timeline-head">
+              <span className="timeline-kicker">{event.type === "player_killed" ? "Night kill" : "Elimination"}</span>
+              <span className="timeline-time">{formatEventClock(event.ts)}</span>
+            </div>
+            <p className="timeline-body">
+              <strong>{playerName(playerNameById, playerId)}</strong> {verb}.
+            </p>
+          </li>
+        );
+      }
+
+      if (event.type === "vote_result") {
+        const eliminated = asString(payload.eliminated);
+        const tally = asRecord(payload.tally);
+        return (
+          <li
+            id={event.id}
+            key={event.id}
+            className={withHighlightClass("timeline-card timeline-card-accent", event.id, highlightedEventId)}
+          >
+            <div className="timeline-head">
+              <span className="timeline-kicker">Vote result</span>
+              <span className="timeline-time">{formatEventClock(event.ts)}</span>
+            </div>
+            <p className="timeline-body">
+              <strong>{playerName(playerNameById, eliminated)}</strong> leaves the table.
+            </p>
+            <div className="timeline-tags">
+              {Object.entries(tally)
+                .sort(([left], [right]) => left.localeCompare(right))
+                .map(([playerId, votesValue]) => (
+                  <span key={`${event.id}-${playerId}`} className="meta-pill">
+                    {playerName(playerNameById, playerId)} {String(votesValue)}
+                  </span>
+                ))}
+            </div>
+          </li>
+        );
+      }
+
+      if (event.type === "match_ended") {
+        return (
+          <li
+            id={event.id}
+            key={event.id}
+            className={withHighlightClass("timeline-card timeline-card-success", event.id, highlightedEventId)}
+          >
+            <div className="timeline-head">
+              <span className="timeline-kicker">Match ended</span>
+              <span className="timeline-time">{formatEventClock(event.ts)}</span>
+            </div>
+            <p className="timeline-body">
+              <strong>{formatStatusLabel(asString(payload.winning_team))}</strong> win by{" "}
+              {formatStatusLabel(asString(payload.reason))}.
+            </p>
+          </li>
+        );
+      }
+
+      if (event.type === "roles_assigned") {
+        return (
+          <li
+            id={event.id}
+            key={event.id}
+            className={withHighlightClass("timeline-card timeline-card-muted", event.id, highlightedEventId)}
+          >
+            <div className="timeline-head">
+              <span className="timeline-kicker">Spoiler layer</span>
+              <span className="timeline-time">{formatEventClock(event.ts)}</span>
+            </div>
+            <p className="timeline-body">Roles are available in Dramatic Irony mode.</p>
+          </li>
+        );
+      }
+
+      if (event.type === "match_created") {
+        return (
+          <li
+            id={event.id}
+            key={event.id}
+            className={withHighlightClass("timeline-card timeline-card-muted", event.id, highlightedEventId)}
+          >
+            <div className="timeline-head">
+              <span className="timeline-kicker">Table seeded</span>
+              <span className="timeline-time">{formatEventClock(event.ts)}</span>
+            </div>
+            <p className="timeline-body">Match created and ready to run.</p>
+          </li>
+        );
+      }
+
+      return (
+        <li id={event.id} key={event.id} className={withHighlightClass(timelineVariant(event.type), event.id, highlightedEventId)}>
+          <div className="timeline-head">
+            <span className="timeline-kicker">{formatStatusLabel(event.type)}</span>
+            <span className="timeline-time">{formatEventClock(event.ts)}</span>
+          </div>
+          <p className="timeline-body">
+            {Object.entries(payload)
+              .slice(0, 4)
+              .map(([key, value]) => `${formatStatusLabel(key)} ${String(value)}`)
+              .join(" · ") || "System event"}
+          </p>
+        </li>
+      );
+    },
+    [highlightedEventId, playerNameById]
+  );
+
   return (
-    <main className="page-shell viewer-shell">
-      <section className="card viewer-main">
-        <header className="viewer-header">
-          <div>
-            <p className="muted">
-              <Link href="/">← Back to matches</Link>
+    <main className="page-shell page-stack viewer-page">
+      <section className="hero-panel viewer-hero">
+        <div className="hero-grid viewer-hero-grid">
+          <div className="hero-copy">
+            <p className="breadcrumb">
+              <Link href="/">Matches</Link>
+              <span>/</span>
+              <span>{formatShortId(matchId, 10, 8)}</span>
             </p>
-            <h1>{matchId}</h1>
-            <p className="muted">
-              status: {match?.status ?? "loading"} · winner: {match?.winner ?? "-"}
+            <span className="eyebrow">Spectator viewer</span>
+            <h1>{winnerLabel} pressure, replayed with control.</h1>
+            <p className="hero-body">
+              Follow the transcript live, flip spoiler layers without changing backend visibility rules, and jump
+              straight from recap clips back into the source replay.
             </p>
-          </div>
-          <div className="toolbar-group">
-            <div className="toolbar-row">
-              <button
-                type="button"
-                className={mode === "live" ? "active-btn" : "secondary-btn"}
-                onClick={() => setMode("live")}
-              >
-                Live
-              </button>
-              <button
-                type="button"
-                className={mode === "replay" ? "active-btn" : "secondary-btn"}
-                onClick={() => setMode("replay")}
-              >
-                Replay
-              </button>
+
+            <div className="feature-strip">
+              <span className={`status-pill status-${match?.status ?? "created"}`}>
+                {formatStatusLabel(match?.status ?? "loading")}
+              </span>
+              <span className="feature-chip">{mode === "live" ? "Live feed" : "Replay mode"}</span>
+              <span className="feature-chip">{visibility === "public" ? "Mystery" : "Dramatic Irony"}</span>
             </div>
-            <div className="toolbar-row">
-              <button
-                type="button"
-                className={visibility === "public" ? "active-btn" : "secondary-btn"}
-                onClick={() => setVisibility("public")}
-              >
-                Mystery
-              </button>
-              <button
-                type="button"
-                className={visibility === "spoilers" ? "active-btn" : "secondary-btn"}
-                onClick={() => setVisibility("spoilers")}
-              >
-                Dramatic Irony
-              </button>
-            </div>
-            {canRun ? (
-              <button type="button" onClick={runMatch} disabled={runningRequest}>
-                {runningRequest ? "Starting..." : "Run Match"}
-              </button>
-            ) : null}
           </div>
-        </header>
 
-        {actionError ? <p className="error-text">{actionError}</p> : null}
-        {eventsError ? <p className="error-text">{eventsError}</p> : null}
-        {isLoading ? <p className="muted">Loading {mode} events...</p> : null}
-
-        <ol className="transcript-list">
-          {events.map((event: ReplayEvent) => {
-            const payload = asRecord(event.payload);
-            if (event.type === "phase_started") {
-              const phase = asString(payload.phase, event.type);
-              const day = asNumber(payload.day, 0);
-              const round = asString(payload.round);
-              return (
-                <li id={event.id} key={event.id} className="phase-marker">
-                  {formatPhaseLabel(phase, day, round)}
-                </li>
-              );
-            }
-
-            if (event.type === "public_message") {
-              const playerId = asString(payload.player_id);
-              const text = asString(payload.text);
-              return (
-                <li
-                  id={event.id}
-                  key={event.id}
-                  className={withHighlightClass("event-row", event.id, highlightedEventId)}
-                >
-                  <strong>{renderPlayerName(playerId)}</strong>: <span>{text}</span>
-                </li>
-              );
-            }
-
-            if (event.type === "player_killed" || event.type === "player_eliminated") {
-              const playerId = asString(payload.player_id);
-              const verb = event.type === "player_killed" ? "was killed" : "was eliminated";
-              return (
-                <li
-                  id={event.id}
-                  key={event.id}
-                  className={withHighlightClass("event-notice", event.id, highlightedEventId)}
-                >
-                  {renderPlayerName(playerId)} {verb}.
-                </li>
-              );
-            }
-
-            if (event.type === "vote_result") {
-              const eliminated = asString(payload.eliminated);
-              const tally = asRecord(payload.tally);
-              const tallyText = Object.entries(tally)
-                .sort(([a], [b]) => a.localeCompare(b))
-                .map(([playerId, votesValue]) => `${playerId}:${String(votesValue)}`)
-                .join(" ");
-              return (
-                <li
-                  id={event.id}
-                  key={event.id}
-                  className={withHighlightClass("event-row", event.id, highlightedEventId)}
-                >
-                  Vote result: eliminated {renderPlayerName(eliminated)} | tally {tallyText}
-                </li>
-              );
-            }
-
-            if (event.type === "match_ended") {
-              const winningTeam = asString(payload.winning_team);
-              const reason = asString(payload.reason);
-              return (
-                <li id={event.id} key={event.id} className="winner-banner">
-                  Winner: {winningTeam} ({reason})
-                </li>
-              );
-            }
-
-            if (event.type === "roles_assigned") {
-              return (
-                <li
-                  id={event.id}
-                  key={event.id}
-                  className={withHighlightClass("event-row muted", event.id, highlightedEventId)}
-                >
-                  Roles assigned (spoiler data loaded).
-                </li>
-              );
-            }
-
-            return null;
-          })}
-        </ol>
+          <div className="metrics-grid metrics-grid-compact">
+            <article className="stat-card">
+              <span className="stat-label">Current phase</span>
+              <strong className="stat-value">{phaseLabel}</strong>
+              <span className="stat-meta">Replay tick {events.at(-1)?.t ?? 0}</span>
+            </article>
+            <article className="stat-card">
+              <span className="stat-label">Public messages</span>
+              <strong className="stat-value">{publicMessageCount}</strong>
+              <span className="stat-meta">Town pressure in plain sight</span>
+            </article>
+            <article className="stat-card">
+              <span className="stat-label">Votes logged</span>
+              <strong className="stat-value">{voteCount}</strong>
+              <span className="stat-meta">Every public vote cast is replay-backed</span>
+            </article>
+            <article className="stat-card">
+              <span className="stat-label">Deaths / eliminations</span>
+              <strong className="stat-value">{killCount}</strong>
+              <span className="stat-meta">Roster state updates automatically</span>
+            </article>
+          </div>
+        </div>
       </section>
 
-      <aside className="viewer-sidebar">
-        <section className="sidebar-card">
-          <h3>Roster</h3>
-          <ul className="compact-list">
-            {roster.map((entry) => {
-              const alive = aliveSet.has(entry.player_id);
-              const role = rolesByPlayer[entry.player_id];
-              return (
-                <li key={entry.player_id}>
-                  <span>{entry.name}</span>
-                  <span className={alive ? "alive-badge" : "dead-badge"}>
-                    {alive ? "alive" : "dead"}
-                  </span>
-                  {visibility !== "public" && role ? <span className="role-pill">{role}</span> : null}
-                </li>
-              );
-            })}
-          </ul>
+      <div className="viewer-shell">
+        <section className="viewer-main">
+          <section className="panel viewer-toolbar">
+            <div className="viewer-toolbar-row">
+              <div className="section-heading">
+                <span className="eyebrow">Controls</span>
+                <h2>Replay control room</h2>
+                <p className="section-copy">
+                  Switch feed mode and spoiler depth instantly. Match start remains the same protected API action.
+                </p>
+              </div>
+
+              <div className="toolbar-stack">
+                <div className="segmented-control" role="tablist" aria-label="Viewer mode">
+                  <button
+                    type="button"
+                    className={mode === "live" ? "segment-btn segment-btn-active" : "segment-btn"}
+                    onClick={() => setMode("live")}
+                  >
+                    Live
+                  </button>
+                  <button
+                    type="button"
+                    className={mode === "replay" ? "segment-btn segment-btn-active" : "segment-btn"}
+                    onClick={() => setMode("replay")}
+                  >
+                    Replay
+                  </button>
+                </div>
+
+                <div className="segmented-control" role="tablist" aria-label="Visibility mode">
+                  <button
+                    type="button"
+                    className={visibility === "public" ? "segment-btn segment-btn-active" : "segment-btn"}
+                    onClick={() => setVisibility("public")}
+                  >
+                    Mystery
+                  </button>
+                  <button
+                    type="button"
+                    className={visibility === "spoilers" ? "segment-btn segment-btn-active" : "segment-btn"}
+                    onClick={() => setVisibility("spoilers")}
+                  >
+                    Dramatic Irony
+                  </button>
+                </div>
+
+                {canRun ? (
+                  <button type="button" className="button-primary" onClick={() => void runMatch()} disabled={runningRequest}>
+                    {runningRequest ? "Starting..." : "Run match"}
+                  </button>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="viewer-summary-row">
+              <span className="meta-pill">Winner {winnerLabel}</span>
+              <span className="meta-pill">Created {formatDateTime(match?.created_at ?? null)}</span>
+              <span className="meta-pill">Updated {formatDateTime(match?.finished_at ?? match?.started_at ?? match?.created_at ?? null)}</span>
+              <span className="meta-pill">{events.length} replay events</span>
+            </div>
+          </section>
+
+          {actionError ? (
+            <div className="message-banner message-banner-error" role="alert">
+              {actionError}
+            </div>
+          ) : null}
+          {eventsError ? (
+            <div className="message-banner message-banner-error" role="alert">
+              {eventsError}
+            </div>
+          ) : null}
+
+          <section className="panel transcript-panel">
+            <div className="section-heading section-heading-row">
+              <div>
+                <span className="eyebrow">Transcript</span>
+                <h2>Public event log</h2>
+                <p className="section-copy">
+                  The transcript is always sourced from replay NDJSON or the live SSE stream for this match.
+                </p>
+              </div>
+              <div className="section-summary">
+                <span className="feature-chip">{isLoading ? `Loading ${mode}...` : "Synced"}</span>
+                <span className="muted">{visibility === "public" ? "Spoiler-safe" : "Spoiler-aware"}</span>
+              </div>
+            </div>
+
+            {isLoading ? (
+              <div className="timeline-skeleton">
+                {Array.from({ length: 5 }, (_, index) => (
+                  <div key={`timeline-skeleton-${index}`} className="timeline-card skeleton-card">
+                    <div className="skeleton-line skeleton-line-short" />
+                    <div className="skeleton-line" />
+                    <div className="skeleton-line skeleton-line-short" />
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            {!isLoading && events.length === 0 ? (
+              <div className="empty-state empty-state-compact">
+                <div className="empty-state-art" aria-hidden="true" />
+                <div>
+                  <h3>No events yet</h3>
+                  <p className="muted">Run the match or wait for the stream to begin emitting replay events.</p>
+                </div>
+              </div>
+            ) : null}
+
+            {!isLoading && events.length > 0 ? <ol className="timeline-list">{events.map(renderEvent)}</ol> : null}
+          </section>
         </section>
 
-        <PredictionWidget matchId={matchId} roster={roster} requiredWolves={requiredWolves} />
+        <aside className="viewer-sidebar">
+          <section className="panel roster-panel">
+            <div className="section-heading section-heading-row">
+              <div>
+                <span className="eyebrow">Roster</span>
+                <h3>Table state</h3>
+              </div>
+              <span className="meta-pill">{aliveSet.size} alive</span>
+            </div>
 
-        {match?.status === "finished" ? (
-          <section className="sidebar-card town-crier-panel">
-            <h3>Town Crier</h3>
-            {recapError ? <p className="error-text">{recapError}</p> : null}
-            {!recap && !recapError ? <p className="muted">Recap is generating...</p> : null}
+            <div className="roster-grid">
+              {roster.map((entry) => {
+                const alive = aliveSet.has(entry.player_id);
+                const role = rolesByPlayer[entry.player_id];
+                return (
+                  <article key={entry.player_id} className={alive ? "player-card" : "player-card player-card-dead"}>
+                    <div className="player-avatar">{getInitials(entry.name)}</div>
+                    <div className="player-copy">
+                      <strong>{entry.name}</strong>
+                      <span className="mono-small">{entry.player_id}</span>
+                    </div>
+                    <div className="player-state">
+                      <span className={alive ? "meta-pill meta-pill-success" : "meta-pill meta-pill-danger"}>
+                        {alive ? "Alive" : "Dead"}
+                      </span>
+                      {visibility !== "public" && role ? <span className="meta-pill meta-pill-accent">{role}</span> : null}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+
+          <PredictionWidget matchId={matchId} roster={roster} requiredWolves={requiredWolves} />
+
+          <section className="panel panel-strong recap-panel">
+            <div className="section-heading">
+              <span className="eyebrow">Town Crier</span>
+              <h3>Recap, clips, and share card</h3>
+              <p className="section-copy">
+                Completed matches unlock a narrative recap, jump-to clips, and a shareable match card.
+              </p>
+            </div>
+
+            {match?.status !== "finished" ? (
+              <div className="empty-state empty-state-compact">
+                <div className="empty-state-art" aria-hidden="true" />
+                <div>
+                  <h3>Recap pending</h3>
+                  <p className="muted">Finish the match to generate bullets, narration, clips, and the share card preview.</p>
+                </div>
+              </div>
+            ) : null}
+
+            {recapError ? (
+              <div className="message-banner message-banner-error" role="alert">
+                {recapError}
+              </div>
+            ) : null}
+
+            {match?.status === "finished" && !recap && !recapError ? (
+              <div className="timeline-skeleton">
+                <div className="timeline-card skeleton-card">
+                  <div className="skeleton-line skeleton-line-short" />
+                  <div className="skeleton-line" />
+                  <div className="skeleton-line" />
+                </div>
+              </div>
+            ) : null}
+
             {recap ? (
               <>
+                <div className="metrics-grid metrics-grid-compact">
+                  <article className="stat-card">
+                    <span className="stat-label">Winner</span>
+                    <strong className="stat-value">{formatStatusLabel(recap.winner.team)}</strong>
+                    <span className="stat-meta">{formatStatusLabel(recap.winner.reason)}</span>
+                  </article>
+                  <article className="stat-card">
+                    <span className="stat-label">Days</span>
+                    <strong className="stat-value">{recap.stats.days}</strong>
+                    <span className="stat-meta">{recap.stats.public_messages} public messages</span>
+                  </article>
+                  <article className="stat-card">
+                    <span className="stat-label">Votes</span>
+                    <strong className="stat-value">{recap.stats.votes}</strong>
+                    <span className="stat-meta">{recap.stats.eliminations} eliminations</span>
+                  </article>
+                </div>
+
                 <ul className="bullet-list">
                   {recap.bullets.map((bullet, index) => (
                     <li key={`bullet-${index}`}>{bullet}</li>
                   ))}
                 </ul>
 
-                <pre className="narration-block">{recap.narration_15s}</pre>
+                <div className="narration-card">
+                  <span className="eyebrow">Narration</span>
+                  <p className="narration-block">{recap.narration_15s}</p>
+                </div>
 
-                <div>
-                  <h4>Clips</h4>
+                <div className="clip-stack">
+                  <div className="section-heading">
+                    <span className="eyebrow">Clip list</span>
+                    <h4>Jump to pivotal beats</h4>
+                  </div>
+
                   <ol className="clip-list">
                     {recap.clips.map((clip) => (
                       <li key={clip.clip_id}>
                         <button
                           type="button"
-                          className="clip-btn"
+                          className="clip-card"
                           onClick={() => handleClipClick(clip.start_event_id)}
                         >
-                          {clip.title} ({clip.kind}) · score {clip.score}
-                          <br />
-                          <span className="muted">{clip.reason}</span>
+                          <span className="clip-card-top">
+                            <strong>{clip.title}</strong>
+                            <span className="meta-pill">{clip.kind}</span>
+                          </span>
+                          <span className="clip-card-copy">{clip.reason}</span>
                         </button>
                       </li>
                     ))}
                   </ol>
                 </div>
 
-                <div>
-                  <h4>Share Card</h4>
+                <div className="share-card-frame">
+                  <div className="section-heading section-heading-row">
+                    <div>
+                      <span className="eyebrow">Share card</span>
+                      <h4>Preview asset</h4>
+                    </div>
+                    <a href={shareCardUrl} target="_blank" rel="noreferrer" className="button-link button-link-subtle">
+                      Open image
+                    </a>
+                  </div>
+
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     className="share-card"
                     src={shareCardUrl}
                     alt={`HowlHouse share card (${shareCardVisibility})`}
                   />
-                  <p className="muted">
-                    <a href={shareCardUrl} target="_blank" rel="noreferrer">
-                      Open image
-                    </a>
-                  </p>
                 </div>
               </>
             ) : null}
           </section>
-        ) : null}
-      </aside>
+        </aside>
+      </div>
     </main>
   );
 }
