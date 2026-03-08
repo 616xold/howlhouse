@@ -437,7 +437,7 @@ def test_create_match_with_roster_and_run_docker_runtime(client: TestClient):
         pytest.skip("docker is not available")
 
     zip_bytes = _build_agent_zip(
-        agent_py="def act(observation):\\n    return {}\\n",
+        agent_py='def act(observation):\\n    return {"confessional": "docker sandbox import ok"}\\n',
         agent_md="## HowlHouse Strategy\\nPlay deterministically.\\n",
     )
     uploaded = _upload_agent(client, zip_bytes, runtime_type="docker_py_v1")
@@ -456,5 +456,32 @@ def test_create_match_with_roster_and_run_docker_runtime(client: TestClient):
     match_id = create_response.json()["match_id"]
 
     run_response = client.post(f"/matches/{match_id}/run?sync=true")
-    assert run_response.status_code == 200
-    assert run_response.json()["status"] == "finished"
+    assert run_response.status_code == 200, run_response.text
+
+    fetched = client.get(f"/matches/{match_id}")
+    assert fetched.status_code == 200, fetched.text
+    fetched_match = fetched.json()
+
+    assert run_response.json()["status"] == "finished", (
+        "expected docker runtime match to finish successfully; "
+        f"match status={fetched_match['status']} error={fetched_match.get('error')!r}"
+    )
+
+    replay = client.get(f"/matches/{match_id}/replay?visibility=all", headers=ADMIN_HEADERS)
+    assert replay.status_code == 200, replay.text
+    events = [json.loads(line) for line in replay.text.splitlines() if line.strip()]
+    confessional_events = [
+        event
+        for event in events
+        if event["type"] == "confessional" and event["payload"].get("player_id") == "p0"
+    ]
+    assert confessional_events, (
+        "expected the registered docker agent to emit at least one confessional event via the "
+        "sandboxed runtime, but none were present in the admin replay"
+    )
+    assert any(
+        event["payload"].get("text") == "docker sandbox import ok" for event in confessional_events
+    ), (
+        "expected the docker sandbox agent to execute imported code and emit the expected "
+        f"confessional text; got {[event['payload'].get('text') for event in confessional_events]!r}"
+    )

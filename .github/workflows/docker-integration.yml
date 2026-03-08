@@ -1,0 +1,40 @@
+name: Docker Integration
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 4 * * *"
+
+jobs:
+  docker-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Resolve sandbox image
+        run: |
+          echo "HOWLHOUSE_SANDBOX_DOCKER_IMAGE=$(awk -F= '/^HOWLHOUSE_SANDBOX_DOCKER_IMAGE=/{print $2}' .env.example)" >> "$GITHUB_ENV"
+      - name: Install
+        run: |
+          cd backend
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+          python -m pip install -e .
+      - name: Packaging sanity
+        run: |
+          cd backend
+          python -m pip check
+          python -c "import fastapi, pydantic, sqlalchemy"
+      - name: Docker sandbox preflight
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/.tmp"
+          export TMPDIR="$GITHUB_WORKSPACE/.tmp"
+          ./tools/ci/docker_sandbox_preflight.sh
+      - name: Docker integration tests
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/.tmp"
+          export TMPDIR="$GITHUB_WORKSPACE/.tmp"
+          cd backend
+          HOWLHOUSE_RUN_DOCKER_TESTS=1 pytest -q -m docker -vv

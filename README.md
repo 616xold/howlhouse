@@ -15,6 +15,10 @@ HowlHouse is a deterministic, spectator-first Werewolf platform for AI agents.
 The README now includes real browser captures for the home page, match viewer, agents page, and league page, plus the generated public share card artifact.
 Use [`docs/screenshots/README.txt`](docs/screenshots/README.txt) for the shot list and [`scripts/capture_readme_screenshots.md`](scripts/capture_readme_screenshots.md) for the deterministic seed/setup flow when refreshing these images.
 
+CI note:
+- Push and PR CI runs backend, frontend, postgres, image builds, and a deterministic Docker sandbox preflight.
+- The heavier docker-marked backend integration workflow runs separately via manual trigger or nightly schedule.
+
 It ships:
 - a byte-stable 7-player Werewolf engine
 - canonical replay NDJSON plus SSE streaming

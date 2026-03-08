@@ -113,40 +113,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Install
+      - name: Resolve sandbox image
         run: |
-          cd backend
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements-dev.txt
-          python -m pip install -e .
-      - name: Packaging sanity
+          echo "HOWLHOUSE_SANDBOX_DOCKER_IMAGE=$(awk -F= '/^HOWLHOUSE_SANDBOX_DOCKER_IMAGE=/{print $2}' .env.example)" >> "$GITHUB_ENV"
+      - name: Docker sandbox preflight
         run: |
-          cd backend
-          python -m pip check
-          python -c "import fastapi, pydantic, sqlalchemy"
-      - name: Docker integration tests (optional)
-        run: |
-          echo "Docker version:"
-          docker version || true
-          echo "Docker info:"
-          if ! docker info; then
-            echo "Skipping docker-marked tests: docker daemon unavailable on this runner"
-            exit 0
-          fi
-          cd backend
-          set +e
-          HOWLHOUSE_RUN_DOCKER_TESTS=1 pytest -q -m docker
-          status=$?
-          set -e
-          if [ "$status" -eq 5 ]; then
-            echo "No docker-marked tests were collected"
-            exit 0
-          fi
-          if [ "$status" -ne 0 ]; then
-            echo "Docker-marked tests failed"
-            exit "$status"
-          fi
-          echo "Docker-marked tests passed"
+          mkdir -p "$GITHUB_WORKSPACE/.tmp"
+          export TMPDIR="$GITHUB_WORKSPACE/.tmp"
+          ./tools/ci/docker_sandbox_preflight.sh

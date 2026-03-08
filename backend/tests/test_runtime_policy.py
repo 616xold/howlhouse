@@ -95,3 +95,53 @@ def test_docker_sandbox_command_runs_as_non_root_and_keeps_isolation_flags(tmp_p
     assert "--cap-drop=ALL" in command
     assert "--security-opt=no-new-privileges" in command
     assert "--tmpfs" in command
+
+
+def test_docker_sandbox_stages_readable_mount_copy_under_tmpdir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    package_dir = tmp_path / "agent_pkg"
+    package_dir.mkdir()
+    nested_dir = package_dir / "pkg"
+    nested_dir.mkdir()
+    entrypoint = package_dir / "agent.py"
+    helper = nested_dir / "helper.py"
+    entrypoint.write_text(
+        "from pkg.helper import MESSAGE\n\ndef act(observation):\n    return {'confessional': MESSAGE}\n",
+        encoding="utf-8",
+    )
+    helper.write_text("MESSAGE = 'sandbox staging ok'\n", encoding="utf-8")
+
+    docker_tmp = tmp_path / "docker_tmp"
+    docker_tmp.mkdir()
+    monkeypatch.setenv("TMPDIR", str(docker_tmp))
+
+    proxy = SandboxAgentProxy(
+        settings=Settings(env="test"),
+        runtime_mode="docker_py_v1",
+        package_path=str(package_dir),
+        entrypoint="agent.py",
+        match_id="match_123",
+        player_id="p0",
+        seed=123,
+        config=GameConfig(rng_seed=123),
+    )
+
+    proxy._prepare_docker_mount_path()
+
+    staged_path = proxy._docker_mount_path
+    assert staged_path is not None
+    assert staged_path.parent.parent == docker_tmp
+    assert staged_path != package_dir
+    assert (staged_path / "agent.py").read_text(encoding="utf-8") == entrypoint.read_text(
+        encoding="utf-8"
+    )
+    assert (staged_path / "pkg" / "helper.py").read_text(encoding="utf-8") == helper.read_text(
+        encoding="utf-8"
+    )
+    assert oct(staged_path.stat().st_mode & 0o777) == "0o755"
+    assert oct((staged_path / "agent.py").stat().st_mode & 0o777) == "0o644"
+
+    proxy._terminate_process()
+
+    assert not staged_path.parent.exists()

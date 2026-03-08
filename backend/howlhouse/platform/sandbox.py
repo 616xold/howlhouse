@@ -4,8 +4,10 @@ import json
 import os
 import re
 import select
+import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 from contextlib import suppress
 from functools import lru_cache
@@ -198,6 +200,7 @@ class SandboxAgentProxy:
         self._config = config
 
         self._process: subprocess.Popen[str] | None = None
+        self._docker_mount_path: Path | None = None
         self._turn = 0
         self._act_calls = 0
         self._start_failed = False
@@ -256,7 +259,14 @@ class SandboxAgentProxy:
         if self._process is not None and self._process.poll() is None:
             return True
 
-        command = self._build_command()
+        try:
+            if self._runtime_mode != "local_py_v1":
+                self._prepare_docker_mount_path()
+            command = self._build_command()
+        except OSError:
+            self._start_failed = True
+            self._cleanup_docker_mount_path()
+            return False
         env = os.environ.copy()
 
         if self._runtime_mode == "local_py_v1":
@@ -310,7 +320,8 @@ class SandboxAgentProxy:
         if self._runtime_mode == "local_py_v1":
             return [sys.executable, "-I", "-u", str(HARNESS_PATH)]
 
-        mount = f"{self._package_path}:/agent:ro"
+        mount_path = self._docker_mount_path or self._package_path
+        mount = f"{mount_path}:/agent:ro"
         return [
             "docker",
             "run",
@@ -342,6 +353,34 @@ class SandboxAgentProxy:
             "-c",
             _harness_source(),
         ]
+
+    def _prepare_docker_mount_path(self) -> None:
+        if self._docker_mount_path is not None:
+            return
+
+        temp_root = Path(
+            tempfile.mkdtemp(prefix="howlhouse-agent-", dir=os.environ.get("TMPDIR") or None)
+        )
+        staged_package_dir = temp_root / "agent"
+        shutil.copytree(self._package_path, staged_package_dir)
+        self._ensure_world_readable_tree(staged_package_dir)
+        self._docker_mount_path = staged_package_dir
+
+    def _cleanup_docker_mount_path(self) -> None:
+        mount_path = self._docker_mount_path
+        if mount_path is None:
+            return
+        self._docker_mount_path = None
+        shutil.rmtree(mount_path.parent, ignore_errors=True)
+
+    def _ensure_world_readable_tree(self, package_dir: Path) -> None:
+        with suppress(OSError):
+            package_dir.chmod(0o755)
+
+        for path in package_dir.rglob("*"):
+            mode = 0o755 if path.is_dir() else 0o644
+            with suppress(OSError):
+                path.chmod(mode)
 
     def _send_json(self, value: dict[str, Any]) -> bool:
         if self._process is None or self._process.stdin is None:
@@ -382,25 +421,26 @@ class SandboxAgentProxy:
 
     def _terminate_process(self) -> None:
         process = self._process
-        if process is None:
-            return
         self._process = None
 
-        if process.poll() is None:
-            process.terminate()
-            try:
-                process.wait(timeout=0.2)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                with suppress(subprocess.TimeoutExpired):
+        if process is not None:
+            if process.poll() is None:
+                process.terminate()
+                try:
                     process.wait(timeout=0.2)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    with suppress(subprocess.TimeoutExpired):
+                        process.wait(timeout=0.2)
 
-        if process.stdin is not None:
-            with suppress(OSError):
-                process.stdin.close()
-        if process.stdout is not None:
-            with suppress(OSError):
-                process.stdout.close()
+            if process.stdin is not None:
+                with suppress(OSError):
+                    process.stdin.close()
+            if process.stdout is not None:
+                with suppress(OSError):
+                    process.stdout.close()
+
+        self._cleanup_docker_mount_path()
 
 
 def create_registered_agent_proxy(
