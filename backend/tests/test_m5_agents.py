@@ -262,7 +262,9 @@ def test_identical_agent_upload_is_immutable(client: TestClient):
 
     listed = client.get("/agents")
     assert listed.status_code == 200
-    assert len(listed.json()) == 1
+    listed_payload = listed.json()
+    assert len(listed_payload) == 1
+    assert listed_payload[0]["strategy_text"] == "Stay consistent."
 
 
 def test_local_runtime_upload_rejected_in_production(tmp_path, monkeypatch):

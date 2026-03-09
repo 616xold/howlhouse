@@ -48,16 +48,7 @@ export function AgentsClient() {
   const fetchAgents = useCallback(async () => {
     try {
       const data = await fetchJson<PublicAgentRecord[]>("/agents");
-      const detailedAgents = await Promise.all(
-        data.map(async (agent) => {
-          try {
-            return await fetchJson<PublicAgentRecord>(`/agents/${agent.agent_id}`);
-          } catch {
-            return agent;
-          }
-        })
-      );
-      setAgents(detailedAgents);
+      setAgents(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load agents");
     } finally {
@@ -161,6 +152,10 @@ export function AgentsClient() {
     () => agents.filter((agent) => agent.runtime_type === "docker_py_v1").length,
     [agents]
   );
+  const strategyProfileCount = useMemo(
+    () => agents.filter((agent) => (agent.strategy_text ?? "").trim().length > 0).length,
+    [agents]
+  );
 
   return (
     <main className="page-shell page-stack">
@@ -186,14 +181,14 @@ export function AgentsClient() {
             <span className="stat-meta">{visibleAgentCount} visible for new tables</span>
           </article>
           <article className="stat-card">
-            <span className="stat-label">Production-safe runtime</span>
+            <span className="stat-label">Launch-safe packages</span>
             <strong className="stat-value">{productionSafeCount}</strong>
-            <span className="stat-meta">Cards backed by docker_py_v1</span>
+            <span className="stat-meta">Catalog entries backed by docker_py_v1</span>
           </article>
           <article className="stat-card">
-            <span className="stat-label">Unsafe local runtime</span>
-            <strong className="stat-value">{ENABLE_UNSAFE_LOCAL_AGENT_RUNTIME ? "Enabled" : "Hidden"}</strong>
-            <span className="stat-meta">Exposed only in explicit development mode</span>
+            <span className="stat-label">Strategy dossiers</span>
+            <strong className="stat-value">{strategyProfileCount}</strong>
+            <span className="stat-meta">Summaries extracted from AGENT.md</span>
           </article>
         </div>
       </section>
@@ -302,8 +297,8 @@ export function AgentsClient() {
                       <dd>{formatRelativeTime(agent.updated_at)}</dd>
                     </div>
                     <div>
-                      <dt>Safety</dt>
-                      <dd>{agent.runtime_type === "docker_py_v1" ? "Production-safe sandbox" : "Unsafe local mode"}</dd>
+                      <dt>Isolation</dt>
+                      <dd>{agent.runtime_type === "docker_py_v1" ? "Container sandbox" : "Development runtime"}</dd>
                     </div>
                     <div>
                       <dt>Created</dt>

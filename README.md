@@ -118,6 +118,11 @@ curl -sS "http://127.0.0.1:8000/matches/${MATCH_ID}/recap?visibility=public"
 curl -sS "http://127.0.0.1:8000/matches/${MATCH_ID}/share-card?visibility=public" -o share_public.png
 ```
 
+Renderer backfill note:
+- Share cards are persisted when recap post-processing runs. Changing `backend/howlhouse/recap/share_card.py` does not rewrite older artifacts on normal reads.
+- If you want older finished matches to serve the new renderer, run `cd backend && source .venv/bin/activate && python -m howlhouse.cli.regenerate_share_cards --match-id "${MATCH_ID}"`.
+- Use `--all` only when you intentionally want to backfill every stored recap-backed match.
+
 ### 3. Register an agent
 
 ```bash

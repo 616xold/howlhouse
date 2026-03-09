@@ -24,6 +24,7 @@ def _agent_summary(record: AgentRecord, *, admin_view: bool) -> dict[str, Any]:
         "name": record.name,
         "version": record.version,
         "runtime_type": record.runtime_type,
+        "strategy_text": record.strategy_text,
         "created_by_ip": record.created_by_ip if admin_view else None,
         "hidden_at": record.hidden_at,
         "hidden_reason": record.hidden_reason,

@@ -1,12 +1,16 @@
 import json
+from copy import deepcopy
+from io import BytesIO
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image
 
 from howlhouse.api.app import create_app
 from howlhouse.core.config import Settings
 from howlhouse.recap import generate_recap, generate_share_cards
+from howlhouse.recap.share_card import CANVAS
 
 ADMIN_HEADERS = {"X-HowlHouse-Admin": "ops-secret"}
 
@@ -39,6 +43,12 @@ def _read_events(client: TestClient, match_id: str) -> list[dict]:
     return [json.loads(line) for line in replay_response.text.splitlines() if line.strip()]
 
 
+def _assert_valid_png(payload: bytes) -> None:
+    with Image.open(BytesIO(payload)) as image:
+        assert image.format == "PNG"
+        assert image.size == CANVAS
+
+
 def test_recap_and_share_card_endpoints(client: TestClient):
     match_id = _create_and_run_sync(client, seed=2024)
 
@@ -60,14 +70,52 @@ def test_recap_and_share_card_endpoints(client: TestClient):
     assert public_card.status_code == 200
     assert public_card.headers.get("content-type") == "image/png"
     assert len(public_card.content) > 400
+    _assert_valid_png(public_card.content)
 
     spoilers_card = client.get(f"/matches/{match_id}/share-card?visibility=spoilers")
     assert spoilers_card.status_code == 200
     assert spoilers_card.headers.get("content-type") == "image/png"
     assert len(spoilers_card.content) > 400
+    _assert_valid_png(spoilers_card.content)
+    assert public_card.content != spoilers_card.content
 
 
-def test_recap_and_share_card_are_deterministic(client: TestClient, tmp_path: Path):
+def test_generate_share_cards_fresh_outputs_are_valid_and_spoiler_safe(
+    client: TestClient, tmp_path: Path
+):
+    match_id = _create_and_run_sync(client, seed=2026)
+    events = _read_events(client, match_id)
+    recap = generate_recap(events)
+
+    public_path, spoilers_path = generate_share_cards(match_id, recap, tmp_path / "cards")
+    public_bytes = Path(public_path).read_bytes()
+    spoilers_bytes = Path(spoilers_path).read_bytes()
+
+    _assert_valid_png(public_bytes)
+    _assert_valid_png(spoilers_bytes)
+    assert public_bytes != spoilers_bytes
+
+    role_mutated_recap = deepcopy(recap)
+    role_mutated_recap["roles"] = {
+        player_id: f"private-role-{index}"
+        for index, player_id in enumerate(sorted(role_mutated_recap.get("roles", {}).keys()))
+    }
+    role_mutated_recap["confessional_highlights"] = [
+        {
+            "event_id": "evt_private",
+            "player_id": "p0",
+            "text": "Private-only content should never affect the public card.",
+            "phase": "night",
+        }
+    ]
+
+    public_only_path, _ = generate_share_cards(
+        match_id, role_mutated_recap, tmp_path / "cards_role_mutated"
+    )
+    assert Path(public_only_path).read_bytes() == public_bytes
+
+
+def test_generate_share_cards_fresh_outputs_are_deterministic(client: TestClient, tmp_path: Path):
     match_id = _create_and_run_sync(client, seed=2025)
     events = _read_events(client, match_id)
 

@@ -18,7 +18,9 @@ STEEL = (58, 70, 84)
 MOSS = (61, 91, 76)
 
 
-def _blend(left: tuple[int, int, int], right: tuple[int, int, int], ratio: float) -> tuple[int, int, int]:
+def _blend(
+    left: tuple[int, int, int], right: tuple[int, int, int], ratio: float
+) -> tuple[int, int, int]:
     return tuple(int(left[index] + (right[index] - left[index]) * ratio) for index in range(3))
 
 
@@ -162,7 +164,9 @@ def _draw_brand_mark(draw: ImageDraw.ImageDraw, *, x: int, y: int) -> None:
     draw.ellipse((x + 12, y + 6, x + 32, y + 26), fill=COAL)
 
 
-def _draw_kicker(draw: ImageDraw.ImageDraw, *, x: int, y: int, text: str, accent: tuple[int, int, int]) -> None:
+def _draw_kicker(
+    draw: ImageDraw.ImageDraw, *, x: int, y: int, text: str, accent: tuple[int, int, int]
+) -> None:
     font = _load_font(16, bold=True)
     draw.text((x, y), text.upper(), font=font, fill=accent)
     width = int(draw.textlength(text.upper(), font=font))
@@ -180,9 +184,13 @@ def _draw_stat_card(
     value: str,
     accent: tuple[int, int, int],
 ) -> None:
-    _draw_panel(draw, (x, y, x + width, y + height), fill=(23, 18, 21), outline=(57, 41, 34), radius=20)
+    _draw_panel(
+        draw, (x, y, x + width, y + height), fill=(23, 18, 21), outline=(57, 41, 34), radius=20
+    )
     label_font = _load_font(15, bold=True)
-    value_font = _fit_font(draw, value, max_width=width - 26, start_size=34, min_size=20, serif=True, bold=True)
+    value_font = _fit_font(
+        draw, value, max_width=width - 26, start_size=34, min_size=20, serif=True, bold=True
+    )
     draw.text((x + 14, y + 12), label.upper(), font=label_font, fill=SMOKE)
     draw.text((x + 14, y + 36), value, font=value_font, fill=accent)
 
@@ -201,7 +209,9 @@ def _draw_quote_card(
     quote_font = _load_font(26, serif=True, bold=True)
     meta_font = _load_font(16, mono=True)
     lines = _wrap_text(draw, quote, font=quote_font, max_width=x1 - x0 - 72)
-    _draw_lines(draw, lines, x=x0 + 42, y=y0 + 26, font=quote_font, fill=BONE, line_height=34, max_lines=3)
+    _draw_lines(
+        draw, lines, x=x0 + 42, y=y0 + 26, font=quote_font, fill=BONE, line_height=34, max_lines=3
+    )
     draw.text((x0 + 42, y1 - 34), meta, font=meta_font, fill=SMOKE)
 
 
@@ -220,7 +230,13 @@ def _draw_clip_row(
     title_font = _load_font(24, serif=True, bold=True)
     kind_font = _load_font(15, bold=True)
     badge = f"{score:02d}"
-    draw.rounded_rectangle((x0 + 16, y0 + 16, x0 + 74, y0 + 54), radius=14, fill=(44, 23, 23), outline=(105, 58, 39), width=1)
+    draw.rounded_rectangle(
+        (x0 + 16, y0 + 16, x0 + 74, y0 + 54),
+        radius=14,
+        fill=(44, 23, 23),
+        outline=(105, 58, 39),
+        width=1,
+    )
     draw.text((x0 + 30, y0 + 27), badge, font=badge_font, fill=BONE)
     draw.text((x0 + 94, y0 + 16), title, font=title_font, fill=BONE)
     draw.text((x0 + 94, y0 + 48), kind.upper(), font=kind_font, fill=accent)
@@ -280,10 +296,14 @@ def _turning_point(recap: dict[str, Any]) -> tuple[str, str]:
     for clip in clips:
         kind = str(clip.get("kind", ""))
         if kind != "ending":
-            return str(clip.get("title", "Turning point")), str(clip.get("reason", "Critical swing in the replay archive."))
+            return str(clip.get("title", "Turning point")), str(
+                clip.get("reason", "Critical swing in the replay archive.")
+            )
     if clips:
         clip = clips[0]
-        return str(clip.get("title", "Turning point")), str(clip.get("reason", "Critical swing in the replay archive."))
+        return str(clip.get("title", "Turning point")), str(
+            clip.get("reason", "Critical swing in the replay archive.")
+        )
     return "Turning point", "Critical swing in the replay archive."
 
 
@@ -314,19 +334,33 @@ def _render_public_card(match_id: str, recap: dict[str, Any]) -> Image.Image:
 
     _draw_brand_mark(draw, x=96, y=92)
     _draw_kicker(draw, x=144, y=96, text="Public teaser", accent=BRASS)
-    draw.text((96, 138), "Mystery mode keeps the verdict sealed.", font=_load_font(24, bold=True), fill=SMOKE)
+    draw.text(
+        (96, 138),
+        "Mystery mode keeps the verdict sealed.",
+        font=_load_font(24, bold=True),
+        fill=SMOKE,
+    )
 
     headline = "Verdict under lock."
-    headline_font = _fit_font(draw, headline, max_width=610, start_size=84, min_size=54, serif=True, bold=True)
+    headline_font = _fit_font(
+        draw, headline, max_width=610, start_size=84, min_size=54, serif=True, bold=True
+    )
     draw.text((96, 184), headline, font=headline_font, fill=BONE)
-    draw.text((96, 266), "Pressure, accusations, and vote swings stay in view.", font=_load_font(32, serif=True, bold=True), fill=BRASS)
+    draw.text(
+        (96, 266),
+        "Pressure, accusations, and vote swings stay in view.",
+        font=_load_font(32, serif=True, bold=True),
+        fill=BRASS,
+    )
 
     safe_lines = _safe_public_lines(recap)
     body_font = _load_font(24)
     cursor = 318
     for line in safe_lines:
         wrapped = _wrap_text(draw, line, font=body_font, max_width=610)
-        cursor = _draw_lines(draw, wrapped, x=96, y=cursor, font=body_font, fill=SMOKE, line_height=32, max_lines=2)
+        cursor = _draw_lines(
+            draw, wrapped, x=96, y=cursor, font=body_font, fill=SMOKE, line_height=32, max_lines=2
+        )
         cursor += 8
 
     quote, meta = _public_quote(recap)
@@ -338,14 +372,51 @@ def _render_public_card(match_id: str, recap: dict[str, Any]) -> Image.Image:
     clips = _top_clips(recap, limit=3)
     clip_count = len(_top_clips(recap, limit=8))
 
-    stat_y = 390
-    _draw_stat_card(draw, x=564, y=390, width=94, height=110, label="Days", value=str(int(stats.get("days", 0))), accent=BRASS)
-    _draw_stat_card(draw, x=672, y=390, width=94, height=110, label="Votes", value=str(int(stats.get("votes", 0))), accent=BONE)
-    _draw_stat_card(draw, x=564, y=404 - 126, width=94, height=110, label="Msgs", value=str(int(stats.get("public_messages", 0))), accent=BONE)
-    _draw_stat_card(draw, x=672, y=404 - 126, width=94, height=110, label="Clips", value=str(clip_count), accent=BRASS)
+    _draw_stat_card(
+        draw,
+        x=564,
+        y=390,
+        width=94,
+        height=110,
+        label="Days",
+        value=str(int(stats.get("days", 0))),
+        accent=BRASS,
+    )
+    _draw_stat_card(
+        draw,
+        x=672,
+        y=390,
+        width=94,
+        height=110,
+        label="Votes",
+        value=str(int(stats.get("votes", 0))),
+        accent=BONE,
+    )
+    _draw_stat_card(
+        draw,
+        x=564,
+        y=404 - 126,
+        width=94,
+        height=110,
+        label="Msgs",
+        value=str(int(stats.get("public_messages", 0))),
+        accent=BONE,
+    )
+    _draw_stat_card(
+        draw,
+        x=672,
+        y=404 - 126,
+        width=94,
+        height=110,
+        label="Clips",
+        value=str(clip_count),
+        accent=BRASS,
+    )
 
     _draw_kicker(draw, x=844, y=94, text="Replay dossier", accent=BRASS)
-    draw.text((844, 136), "Public-safe beats from the table.", font=_load_font(24, bold=True), fill=SMOKE)
+    draw.text(
+        (844, 136), "Public-safe beats from the table.", font=_load_font(24, bold=True), fill=SMOKE
+    )
 
     clip_y = 176
     clip_accents = [EMBER, BRASS, MOSS]
@@ -360,10 +431,19 @@ def _render_public_card(match_id: str, recap: dict[str, Any]) -> Image.Image:
         )
         clip_y += 104
 
-    _draw_panel(draw, (844, 492 - 92, 1112, 492), fill=(34, 18, 20), outline=(101, 59, 41), radius=18)
+    _draw_panel(
+        draw, (844, 492 - 92, 1112, 492), fill=(34, 18, 20), outline=(101, 59, 41), radius=18
+    )
     draw.text((864, 420), "OPEN DRAMATIC IRONY", font=_load_font(15, bold=True), fill=EMBER)
-    draw.text((864, 448), "Reveal the winning side, roles, and final turn.", font=_load_font(22, serif=True, bold=True), fill=BONE)
-    draw.text((864, 480), f"case {_match_ref(match_id)}", font=_load_font(16, mono=True), fill=SMOKE)
+    draw.text(
+        (864, 448),
+        "Reveal the winning side, roles, and final turn.",
+        font=_load_font(22, serif=True, bold=True),
+        fill=BONE,
+    )
+    draw.text(
+        (864, 480), f"case {_match_ref(match_id)}", font=_load_font(16, mono=True), fill=SMOKE
+    )
 
     _draw_footer(draw, visibility_label="public teaser", footer_note="spectator-first ai werewolf")
     return image
@@ -387,10 +467,17 @@ def _render_spoilers_card(match_id: str, recap: dict[str, Any]) -> Image.Image:
 
     _draw_brand_mark(draw, x=96, y=92)
     _draw_kicker(draw, x=144, y=96, text="Spoiler reveal", accent=EMBER)
-    draw.text((96, 140), "Town Crier verdict for the full replay archive.", font=_load_font(24, bold=True), fill=SMOKE)
+    draw.text(
+        (96, 140),
+        "Town Crier verdict for the full replay archive.",
+        font=_load_font(24, bold=True),
+        fill=SMOKE,
+    )
 
     headline = f"{team} take the room."
-    headline_font = _fit_font(draw, headline, max_width=650, start_size=82, min_size=50, serif=True, bold=True)
+    headline_font = _fit_font(
+        draw, headline, max_width=650, start_size=82, min_size=50, serif=True, bold=True
+    )
     draw.text((96, 182), headline, font=headline_font, fill=BONE)
 
     subline = f"Resolved on day {day} by {reason.lower()}."
@@ -398,8 +485,15 @@ def _render_spoilers_card(match_id: str, recap: dict[str, Any]) -> Image.Image:
 
     narration = str(recap.get("narration_15s", "")).strip()
     deck_font = _load_font(25)
-    deck_lines = _wrap_text(draw, narration or "The final sequence is fully revealed for spoiler viewers.", font=deck_font, max_width=660)
-    _draw_lines(draw, deck_lines, x=96, y=316, font=deck_font, fill=SMOKE, line_height=31, max_lines=3)
+    deck_lines = _wrap_text(
+        draw,
+        narration or "The final sequence is fully revealed for spoiler viewers.",
+        font=deck_font,
+        max_width=660,
+    )
+    _draw_lines(
+        draw, deck_lines, x=96, y=316, font=deck_font, fill=SMOKE, line_height=31, max_lines=3
+    )
 
     bullets = recap.get("bullets", [])
     story_lines: list[str] = []
@@ -410,7 +504,13 @@ def _render_spoilers_card(match_id: str, recap: dict[str, Any]) -> Image.Image:
     story_font = _load_font(20)
     story_y = 420
     for line in story_lines[:2]:
-        draw.rounded_rectangle((96, story_y, 786, story_y + 42), radius=14, fill=(22, 18, 21), outline=(58, 40, 34), width=1)
+        draw.rounded_rectangle(
+            (96, story_y, 786, story_y + 42),
+            radius=14,
+            fill=(22, 18, 21),
+            outline=(58, 40, 34),
+            width=1,
+        )
         draw.text((114, story_y + 11), line, font=story_font, fill=BONE)
         story_y += 54
 
@@ -419,14 +519,45 @@ def _render_spoilers_card(match_id: str, recap: dict[str, Any]) -> Image.Image:
         stats = {}
 
     _draw_kicker(draw, x=860, y=94, text="Verdict board", accent=BRASS)
-    team_font = _fit_font(draw, team, max_width=230, start_size=40, min_size=24, serif=True, bold=True)
+    team_font = _fit_font(
+        draw, team, max_width=230, start_size=40, min_size=24, serif=True, bold=True
+    )
     draw.text((860, 134), team, font=team_font, fill=EMBER)
     draw.text((860, 174), reason, font=_load_font(18, mono=True), fill=SMOKE)
 
-    _draw_stat_card(draw, x=860, y=216, width=118, height=96, label="Day", value=str(day), accent=BRASS)
-    _draw_stat_card(draw, x=992, y=216, width=118, height=96, label="Votes", value=str(int(stats.get("votes", 0))), accent=BONE)
-    _draw_stat_card(draw, x=860, y=326, width=118, height=96, label="Kills", value=str(int(stats.get("night_kills", 0))), accent=EMBER)
-    _draw_stat_card(draw, x=992, y=326, width=118, height=96, label="Outs", value=str(int(stats.get("eliminations", 0))), accent=MOSS)
+    _draw_stat_card(
+        draw, x=860, y=216, width=118, height=96, label="Day", value=str(day), accent=BRASS
+    )
+    _draw_stat_card(
+        draw,
+        x=992,
+        y=216,
+        width=118,
+        height=96,
+        label="Votes",
+        value=str(int(stats.get("votes", 0))),
+        accent=BONE,
+    )
+    _draw_stat_card(
+        draw,
+        x=860,
+        y=326,
+        width=118,
+        height=96,
+        label="Kills",
+        value=str(int(stats.get("night_kills", 0))),
+        accent=EMBER,
+    )
+    _draw_stat_card(
+        draw,
+        x=992,
+        y=326,
+        width=118,
+        height=96,
+        label="Outs",
+        value=str(int(stats.get("eliminations", 0))),
+        accent=MOSS,
+    )
 
     turning_title, turning_reason = _turning_point(recap)
     _draw_panel(draw, (860, 438, 1110, 504), fill=(28, 17, 20), outline=(94, 55, 38), radius=18)
@@ -434,7 +565,9 @@ def _render_spoilers_card(match_id: str, recap: dict[str, Any]) -> Image.Image:
     draw.text((876, 474), turning_title, font=_load_font(24, serif=True, bold=True), fill=BONE)
     draw.text((876, 500 - 10), turning_reason[:42], font=_load_font(15, mono=True), fill=SMOKE)
 
-    _draw_footer(draw, visibility_label="spoiler reveal", footer_note=f"case {_match_ref(match_id)}")
+    _draw_footer(
+        draw, visibility_label="spoiler reveal", footer_note=f"case {_match_ref(match_id)}"
+    )
     return image
 
 

@@ -49,6 +49,10 @@ Use that `MATCH_ID` for `match-viewer.png` and `share-card.png`.
 
 ## 3. Create sample agents for the registry screenshot
 
+Prefer `docker_py_v1` packages for launch-facing captures. If your local catalog also contains
+development-only `local_py_v1` agents, switch the Agents page runtime filter to `docker_py_v1`
+before saving `agents.png` so the README gallery reflects launch-safe runtime posture.
+
 ```bash
 tmpdir="$(mktemp -d)"
 
@@ -118,11 +122,22 @@ echo "${SEASON_ID}"
 
 ## 5. Capture the screenshots
 
+If you changed `backend/howlhouse/recap/share_card.py` and plan to reuse an existing finished match,
+regenerate its persisted share-card artifacts first:
+
+```bash
+cd backend
+source .venv/bin/activate
+python -m howlhouse.cli.regenerate_share_cards --match-id "${MATCH_ID}"
+```
+
+Create a fresh match instead if you prefer not to backfill older stored artifacts.
+
 Use a 1440x900 browser window at 100% zoom and save PNGs into `docs/screenshots/`.
 
 - `match-list.png`: `http://localhost:3000/`
 - `match-viewer.png`: `http://localhost:3000/matches/${MATCH_ID}`
-- `agents.png`: `http://localhost:3000/agents`
+- `agents.png`: `http://localhost:3000/agents` with launch-safe `docker_py_v1` cards visible
 - `league.png`: `http://localhost:3000/league`
 - `share-card.png`: `http://127.0.0.1:8000/matches/${MATCH_ID}/share-card?visibility=public`
 
