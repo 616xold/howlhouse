@@ -52,16 +52,49 @@ function playerName(playerNameById: Map<string, string>, playerId: string): stri
 }
 
 function timelineVariant(type: string): string {
+  if (type === "public_message") {
+    return "timeline-card timeline-card-public";
+  }
+  if (type === "match_created") {
+    return "timeline-card timeline-card-setup";
+  }
+  if (type === "vote_cast") {
+    return "timeline-card timeline-card-vote";
+  }
+  if (type === "roles_assigned") {
+    return "timeline-card timeline-card-reveal";
+  }
   if (type === "player_killed" || type === "player_eliminated") {
     return "timeline-card timeline-card-danger";
   }
   if (type === "match_ended") {
-    return "timeline-card timeline-card-success";
+    return "timeline-card timeline-card-resolution";
   }
   if (type === "vote_result") {
-    return "timeline-card timeline-card-accent";
+    return "timeline-card timeline-card-verdict";
   }
   return "timeline-card";
+}
+
+function roleClass(role: string): string {
+  const normalized = role.toLowerCase();
+  if (normalized.includes("wolf")) {
+    return "meta-pill meta-pill-danger";
+  }
+  if (normalized.includes("seer") || normalized.includes("doctor")) {
+    return "meta-pill meta-pill-accent";
+  }
+  return "meta-pill meta-pill-success";
+}
+
+function clipKindClass(kind: string): string {
+  if (kind === "death" || kind === "ending") {
+    return "meta-pill meta-pill-danger";
+  }
+  if (kind === "vote" || kind === "close_vote") {
+    return "meta-pill meta-pill-accent";
+  }
+  return "meta-pill";
 }
 
 interface MatchViewerClientProps {
@@ -300,7 +333,8 @@ export function MatchViewerClient({ matchId }: MatchViewerClientProps) {
         return (
           <li id={event.id} key={event.id} className="phase-divider">
             <span className="phase-divider-line" aria-hidden="true" />
-            <div>
+            <div className="phase-divider-copy">
+              <span className="phase-divider-kicker">Phase change</span>
               <p className="phase-divider-label">
                 {formatPhaseLabel(asString(payload.phase, event.type), asNumber(payload.day, 0), asString(payload.round))}
               </p>
@@ -316,13 +350,21 @@ export function MatchViewerClient({ matchId }: MatchViewerClientProps) {
           <li
             id={event.id}
             key={event.id}
-            className={withHighlightClass("timeline-card", event.id, highlightedEventId)}
+            className={withHighlightClass(timelineVariant(event.type), event.id, highlightedEventId)}
           >
-            <div className="timeline-head">
-              <span className="timeline-kicker">{speaker}</span>
-              <span className="timeline-time">{formatEventClock(event.ts)}</span>
+            <div className="timeline-card-shell">
+              <span className="timeline-avatar">{getInitials(speaker)}</span>
+              <div className="timeline-copy">
+                <div className="timeline-head">
+                  <div className="timeline-title">
+                    <span className="timeline-kicker">Public message</span>
+                    <strong className="timeline-speaker">{speaker}</strong>
+                  </div>
+                  <span className="timeline-time">{formatEventClock(event.ts)}</span>
+                </div>
+                <p className="timeline-body">{asString(payload.text)}</p>
+              </div>
             </div>
-            <p className="timeline-body">{asString(payload.text)}</p>
           </li>
         );
       }
@@ -334,14 +376,19 @@ export function MatchViewerClient({ matchId }: MatchViewerClientProps) {
           <li
             id={event.id}
             key={event.id}
-            className={withHighlightClass("timeline-card timeline-card-muted", event.id, highlightedEventId)}
+            className={withHighlightClass(timelineVariant(event.type), event.id, highlightedEventId)}
           >
             <div className="timeline-head">
-              <span className="timeline-kicker">Vote cast</span>
+              <div className="timeline-title">
+                <span className="timeline-kicker">Vote lodged</span>
+                <strong className="timeline-speaker">
+                  {voter} → {target}
+                </strong>
+              </div>
               <span className="timeline-time">{formatEventClock(event.ts)}</span>
             </div>
             <p className="timeline-body">
-              <strong>{voter}</strong> voted for <strong>{target}</strong>.
+              <strong>{voter}</strong> places public pressure on <strong>{target}</strong>.
             </p>
           </li>
         );
@@ -354,10 +401,13 @@ export function MatchViewerClient({ matchId }: MatchViewerClientProps) {
           <li
             id={event.id}
             key={event.id}
-            className={withHighlightClass("timeline-card timeline-card-danger", event.id, highlightedEventId)}
+            className={withHighlightClass(timelineVariant(event.type), event.id, highlightedEventId)}
           >
             <div className="timeline-head">
-              <span className="timeline-kicker">{event.type === "player_killed" ? "Night kill" : "Elimination"}</span>
+              <div className="timeline-title">
+                <span className="timeline-kicker">{event.type === "player_killed" ? "Night kill" : "Elimination"}</span>
+                <strong className="timeline-speaker">{playerName(playerNameById, playerId)}</strong>
+              </div>
               <span className="timeline-time">{formatEventClock(event.ts)}</span>
             </div>
             <p className="timeline-body">
@@ -374,15 +424,16 @@ export function MatchViewerClient({ matchId }: MatchViewerClientProps) {
           <li
             id={event.id}
             key={event.id}
-            className={withHighlightClass("timeline-card timeline-card-accent", event.id, highlightedEventId)}
+            className={withHighlightClass(timelineVariant(event.type), event.id, highlightedEventId)}
           >
             <div className="timeline-head">
-              <span className="timeline-kicker">Vote result</span>
+              <div className="timeline-title">
+                <span className="timeline-kicker">Vote result</span>
+                <strong className="timeline-speaker">{playerName(playerNameById, eliminated)} leaves the table</strong>
+              </div>
               <span className="timeline-time">{formatEventClock(event.ts)}</span>
             </div>
-            <p className="timeline-body">
-              <strong>{playerName(playerNameById, eliminated)}</strong> leaves the table.
-            </p>
+            <p className="timeline-body">The tally resolves publicly and the room narrows.</p>
             <div className="timeline-tags">
               {Object.entries(tally)
                 .sort(([left], [right]) => left.localeCompare(right))
@@ -401,10 +452,13 @@ export function MatchViewerClient({ matchId }: MatchViewerClientProps) {
           <li
             id={event.id}
             key={event.id}
-            className={withHighlightClass("timeline-card timeline-card-success", event.id, highlightedEventId)}
+            className={withHighlightClass(timelineVariant(event.type), event.id, highlightedEventId)}
           >
             <div className="timeline-head">
-              <span className="timeline-kicker">Match ended</span>
+              <div className="timeline-title">
+                <span className="timeline-kicker">Final verdict</span>
+                <strong className="timeline-speaker">{formatStatusLabel(asString(payload.winning_team))} prevail</strong>
+              </div>
               <span className="timeline-time">{formatEventClock(event.ts)}</span>
             </div>
             <p className="timeline-body">
@@ -420,10 +474,13 @@ export function MatchViewerClient({ matchId }: MatchViewerClientProps) {
           <li
             id={event.id}
             key={event.id}
-            className={withHighlightClass("timeline-card timeline-card-muted", event.id, highlightedEventId)}
+            className={withHighlightClass(timelineVariant(event.type), event.id, highlightedEventId)}
           >
             <div className="timeline-head">
-              <span className="timeline-kicker">Spoiler layer</span>
+              <div className="timeline-title">
+                <span className="timeline-kicker">Role reveal</span>
+                <strong className="timeline-speaker">Dramatic Irony is available</strong>
+              </div>
               <span className="timeline-time">{formatEventClock(event.ts)}</span>
             </div>
             <p className="timeline-body">Roles are available in Dramatic Irony mode.</p>
@@ -436,10 +493,13 @@ export function MatchViewerClient({ matchId }: MatchViewerClientProps) {
           <li
             id={event.id}
             key={event.id}
-            className={withHighlightClass("timeline-card timeline-card-muted", event.id, highlightedEventId)}
+            className={withHighlightClass(timelineVariant(event.type), event.id, highlightedEventId)}
           >
             <div className="timeline-head">
-              <span className="timeline-kicker">Table seeded</span>
+              <div className="timeline-title">
+                <span className="timeline-kicker">Table seeded</span>
+                <strong className="timeline-speaker">Room configured and ready</strong>
+              </div>
               <span className="timeline-time">{formatEventClock(event.ts)}</span>
             </div>
             <p className="timeline-body">Match created and ready to run.</p>
@@ -450,7 +510,10 @@ export function MatchViewerClient({ matchId }: MatchViewerClientProps) {
       return (
         <li id={event.id} key={event.id} className={withHighlightClass(timelineVariant(event.type), event.id, highlightedEventId)}>
           <div className="timeline-head">
-            <span className="timeline-kicker">{formatStatusLabel(event.type)}</span>
+            <div className="timeline-title">
+              <span className="timeline-kicker">{formatStatusLabel(event.type)}</span>
+              <strong className="timeline-speaker">System event</strong>
+            </div>
             <span className="timeline-time">{formatEventClock(event.ts)}</span>
           </div>
           <p className="timeline-body">
@@ -476,10 +539,10 @@ export function MatchViewerClient({ matchId }: MatchViewerClientProps) {
               <span>{formatShortId(matchId, 10, 8)}</span>
             </p>
             <span className="eyebrow">Spectator viewer</span>
-            <h1>{winnerLabel} pressure, replayed with control.</h1>
+            <h1>{winnerLabel} pressure, archived with control.</h1>
             <p className="hero-body">
-              Follow the transcript live, flip spoiler layers without changing backend visibility rules, and jump
-              straight from recap clips back into the source replay.
+              Track the transcript in real time, shift between Mystery and Dramatic Irony without changing access
+              rules, and jump from recap artifacts straight back into the source replay.
             </p>
 
             <div className="feature-strip">
@@ -491,26 +554,31 @@ export function MatchViewerClient({ matchId }: MatchViewerClientProps) {
             </div>
           </div>
 
-          <div className="metrics-grid metrics-grid-compact">
-            <article className="stat-card">
-              <span className="stat-label">Current phase</span>
-              <strong className="stat-value">{phaseLabel}</strong>
-              <span className="stat-meta">Replay tick {events.at(-1)?.t ?? 0}</span>
-            </article>
-            <article className="stat-card">
-              <span className="stat-label">Public messages</span>
-              <strong className="stat-value">{publicMessageCount}</strong>
-              <span className="stat-meta">Town pressure in plain sight</span>
-            </article>
-            <article className="stat-card">
-              <span className="stat-label">Votes logged</span>
-              <strong className="stat-value">{voteCount}</strong>
-              <span className="stat-meta">Every public vote cast is replay-backed</span>
-            </article>
-            <article className="stat-card">
-              <span className="stat-label">Deaths / eliminations</span>
-              <strong className="stat-value">{killCount}</strong>
-              <span className="stat-meta">Roster state updates automatically</span>
+          <div className="viewer-hero-rail">
+            <article className="panel dossier-card viewer-phase-card">
+              <div className="section-heading">
+                <span className="eyebrow">Current phase</span>
+                <h2>{phaseLabel}</h2>
+                <p className="section-copy">Replay tick {events.at(-1)?.t ?? 0} with deterministic state carried forward automatically.</p>
+              </div>
+              <div className="dossier-grid">
+                <div className="dossier-stat">
+                  <span className="stat-label">Winner</span>
+                  <strong>{winnerLabel}</strong>
+                </div>
+                <div className="dossier-stat">
+                  <span className="stat-label">Messages</span>
+                  <strong>{publicMessageCount}</strong>
+                </div>
+                <div className="dossier-stat">
+                  <span className="stat-label">Votes</span>
+                  <strong>{voteCount}</strong>
+                </div>
+                <div className="dossier-stat">
+                  <span className="stat-label">Eliminations</span>
+                  <strong>{killCount}</strong>
+                </div>
+              </div>
             </article>
           </div>
         </div>
@@ -524,43 +592,49 @@ export function MatchViewerClient({ matchId }: MatchViewerClientProps) {
                 <span className="eyebrow">Controls</span>
                 <h2>Replay control room</h2>
                 <p className="section-copy">
-                  Switch feed mode and spoiler depth instantly. Match start remains the same protected API action.
+                  Shift between live and replay instantly. Visibility changes the spectator layer, not the backend rules.
                 </p>
               </div>
 
               <div className="toolbar-stack">
-                <div className="segmented-control" role="tablist" aria-label="Viewer mode">
-                  <button
-                    type="button"
-                    className={mode === "live" ? "segment-btn segment-btn-active" : "segment-btn"}
-                    onClick={() => setMode("live")}
-                  >
-                    Live
-                  </button>
-                  <button
-                    type="button"
-                    className={mode === "replay" ? "segment-btn segment-btn-active" : "segment-btn"}
-                    onClick={() => setMode("replay")}
-                  >
-                    Replay
-                  </button>
+                <div className="control-cluster">
+                  <span className="field-label">Feed</span>
+                  <div className="segmented-control" role="tablist" aria-label="Viewer mode">
+                    <button
+                      type="button"
+                      className={mode === "live" ? "segment-btn segment-btn-active" : "segment-btn"}
+                      onClick={() => setMode("live")}
+                    >
+                      Live
+                    </button>
+                    <button
+                      type="button"
+                      className={mode === "replay" ? "segment-btn segment-btn-active" : "segment-btn"}
+                      onClick={() => setMode("replay")}
+                    >
+                      Replay
+                    </button>
+                  </div>
                 </div>
 
-                <div className="segmented-control" role="tablist" aria-label="Visibility mode">
-                  <button
-                    type="button"
-                    className={visibility === "public" ? "segment-btn segment-btn-active" : "segment-btn"}
-                    onClick={() => setVisibility("public")}
-                  >
-                    Mystery
-                  </button>
-                  <button
-                    type="button"
-                    className={visibility === "spoilers" ? "segment-btn segment-btn-active" : "segment-btn"}
-                    onClick={() => setVisibility("spoilers")}
-                  >
-                    Dramatic Irony
-                  </button>
+                <div className="control-cluster">
+                  <span className="field-label">Visibility</span>
+                  <div className="segmented-control" role="tablist" aria-label="Visibility mode">
+                    <button
+                      type="button"
+                      className={visibility === "public" ? "segment-btn segment-btn-active" : "segment-btn"}
+                      onClick={() => setVisibility("public")}
+                    >
+                      Mystery
+                    </button>
+                    <button
+                      type="button"
+                      className={visibility === "spoilers" ? "segment-btn segment-btn-active" : "segment-btn"}
+                      onClick={() => setVisibility("spoilers")}
+                    >
+                      Dramatic Irony
+                    </button>
+                  </div>
                 </div>
 
                 {canRun ? (
@@ -574,7 +648,9 @@ export function MatchViewerClient({ matchId }: MatchViewerClientProps) {
             <div className="viewer-summary-row">
               <span className="meta-pill">Winner {winnerLabel}</span>
               <span className="meta-pill">Created {formatDateTime(match?.created_at ?? null)}</span>
-              <span className="meta-pill">Updated {formatDateTime(match?.finished_at ?? match?.started_at ?? match?.created_at ?? null)}</span>
+              <span className="meta-pill">
+                Updated {formatDateTime(match?.finished_at ?? match?.started_at ?? match?.created_at ?? null)}
+              </span>
               <span className="meta-pill">{events.length} replay events</span>
             </div>
           </section>
@@ -594,9 +670,9 @@ export function MatchViewerClient({ matchId }: MatchViewerClientProps) {
             <div className="section-heading section-heading-row">
               <div>
                 <span className="eyebrow">Transcript</span>
-                <h2>Public event log</h2>
+                <h2>Control-room transcript</h2>
                 <p className="section-copy">
-                  The transcript is always sourced from replay NDJSON or the live SSE stream for this match.
+                  Every card is sourced from replay NDJSON or the live SSE stream for this match, with event styling that mirrors the table state.
                 </p>
               </div>
               <div className="section-summary">
@@ -656,8 +732,9 @@ export function MatchViewerClient({ matchId }: MatchViewerClientProps) {
                       <span className={alive ? "meta-pill meta-pill-success" : "meta-pill meta-pill-danger"}>
                         {alive ? "Alive" : "Dead"}
                       </span>
-                      {visibility !== "public" && role ? <span className="meta-pill meta-pill-accent">{role}</span> : null}
+                      {visibility !== "public" && role ? <span className={roleClass(role)}>{formatStatusLabel(role)}</span> : null}
                     </div>
+                    <p className="player-note">{alive ? "Still shaping the room" : "Removed from the table"}</p>
                   </article>
                 );
               })}
@@ -665,121 +742,161 @@ export function MatchViewerClient({ matchId }: MatchViewerClientProps) {
           </section>
 
           <PredictionWidget matchId={matchId} roster={roster} requiredWolves={requiredWolves} />
+        </aside>
+      </div>
 
-          <section className="panel panel-strong recap-panel">
-            <div className="section-heading">
-              <span className="eyebrow">Town Crier</span>
-              <h3>Recap, clips, and share card</h3>
-              <p className="section-copy">
-                Completed matches unlock a narrative recap, jump-to clips, and a shareable match card.
-              </p>
+      <section className="panel panel-strong recap-stage">
+        <div className="section-heading section-heading-row">
+          <div>
+            <span className="eyebrow">Town Crier</span>
+            <h2>Recap, clips, and share artifact</h2>
+            <p className="section-copy">
+              Finished matches generate the narrative layer: recap bullets, quote jumps, pivotal clips, and the share card preview.
+            </p>
+          </div>
+          <span className="meta-pill">{visibility === "public" ? "Public teaser" : "Spoiler view"}</span>
+        </div>
+
+        {match?.status !== "finished" ? (
+          <div className="empty-state empty-state-compact">
+            <div className="empty-state-art" aria-hidden="true" />
+            <div>
+              <h3>Recap pending</h3>
+              <p className="muted">Finish the match to generate bullets, narration, clips, and the share card preview.</p>
             </div>
+          </div>
+        ) : null}
 
-            {match?.status !== "finished" ? (
-              <div className="empty-state empty-state-compact">
-                <div className="empty-state-art" aria-hidden="true" />
-                <div>
-                  <h3>Recap pending</h3>
-                  <p className="muted">Finish the match to generate bullets, narration, clips, and the share card preview.</p>
-                </div>
+        {recapError ? (
+          <div className="message-banner message-banner-error" role="alert">
+            {recapError}
+          </div>
+        ) : null}
+
+        {match?.status === "finished" && !recap && !recapError ? (
+          <div className="timeline-skeleton">
+            <div className="timeline-card skeleton-card">
+              <div className="skeleton-line skeleton-line-short" />
+              <div className="skeleton-line" />
+              <div className="skeleton-line" />
+            </div>
+          </div>
+        ) : null}
+
+        {recap ? (
+          <div className="recap-stage-grid">
+            <div className="recap-story-column">
+              <div className="metrics-grid metrics-grid-compact">
+                <article className="stat-card">
+                  <span className="stat-label">Winner</span>
+                  <strong className="stat-value">{formatStatusLabel(recap.winner.team)}</strong>
+                  <span className="stat-meta">{formatStatusLabel(recap.winner.reason)}</span>
+                </article>
+                <article className="stat-card">
+                  <span className="stat-label">Days</span>
+                  <strong className="stat-value">{recap.stats.days}</strong>
+                  <span className="stat-meta">{recap.stats.public_messages} public messages</span>
+                </article>
+                <article className="stat-card">
+                  <span className="stat-label">Votes</span>
+                  <strong className="stat-value">{recap.stats.votes}</strong>
+                  <span className="stat-meta">{recap.stats.eliminations} eliminations</span>
+                </article>
               </div>
-            ) : null}
 
-            {recapError ? (
-              <div className="message-banner message-banner-error" role="alert">
-                {recapError}
-              </div>
-            ) : null}
-
-            {match?.status === "finished" && !recap && !recapError ? (
-              <div className="timeline-skeleton">
-                <div className="timeline-card skeleton-card">
-                  <div className="skeleton-line skeleton-line-short" />
-                  <div className="skeleton-line" />
-                  <div className="skeleton-line" />
+              <div className="bullet-deck">
+                <div className="section-heading">
+                  <span className="eyebrow">Brief</span>
+                  <h4>What the public story records</h4>
                 </div>
-              </div>
-            ) : null}
-
-            {recap ? (
-              <>
-                <div className="metrics-grid metrics-grid-compact">
-                  <article className="stat-card">
-                    <span className="stat-label">Winner</span>
-                    <strong className="stat-value">{formatStatusLabel(recap.winner.team)}</strong>
-                    <span className="stat-meta">{formatStatusLabel(recap.winner.reason)}</span>
-                  </article>
-                  <article className="stat-card">
-                    <span className="stat-label">Days</span>
-                    <strong className="stat-value">{recap.stats.days}</strong>
-                    <span className="stat-meta">{recap.stats.public_messages} public messages</span>
-                  </article>
-                  <article className="stat-card">
-                    <span className="stat-label">Votes</span>
-                    <strong className="stat-value">{recap.stats.votes}</strong>
-                    <span className="stat-meta">{recap.stats.eliminations} eliminations</span>
-                  </article>
-                </div>
-
-                <ul className="bullet-list">
+                <ul className="bullet-list bullet-list-strong">
                   {recap.bullets.map((bullet, index) => (
                     <li key={`bullet-${index}`}>{bullet}</li>
                   ))}
                 </ul>
+              </div>
 
-                <div className="narration-card">
-                  <span className="eyebrow">Narration</span>
-                  <p className="narration-block">{recap.narration_15s}</p>
-                </div>
+              <div className="narration-card">
+                <span className="eyebrow">Narration</span>
+                <p className="narration-block">{recap.narration_15s}</p>
+              </div>
 
-                <div className="clip-stack">
+              {recap.key_quotes.length > 0 ? (
+                <div className="quote-stack">
                   <div className="section-heading">
-                    <span className="eyebrow">Clip list</span>
-                    <h4>Jump to pivotal beats</h4>
+                    <span className="eyebrow">Key quotes</span>
+                    <h4>Jump back to spoken pressure</h4>
                   </div>
-
-                  <ol className="clip-list">
-                    {recap.clips.map((clip) => (
-                      <li key={clip.clip_id}>
-                        <button
-                          type="button"
-                          className="clip-card"
-                          onClick={() => handleClipClick(clip.start_event_id)}
-                        >
-                          <span className="clip-card-top">
-                            <strong>{clip.title}</strong>
-                            <span className="meta-pill">{clip.kind}</span>
-                          </span>
-                          <span className="clip-card-copy">{clip.reason}</span>
-                        </button>
-                      </li>
+                  <div className="quote-grid">
+                    {recap.key_quotes.map((quote) => (
+                      <button
+                        key={quote.event_id}
+                        type="button"
+                        className="quote-card"
+                        onClick={() => handleClipClick(quote.event_id)}
+                      >
+                        <span className="quote-card-top">
+                          <strong>{playerName(playerNameById, quote.player_id)}</strong>
+                          <span className="meta-pill">Day {quote.day}</span>
+                        </span>
+                        <span className="quote-card-copy">{quote.text}</span>
+                      </button>
                     ))}
-                  </ol>
-                </div>
-
-                <div className="share-card-frame">
-                  <div className="section-heading section-heading-row">
-                    <div>
-                      <span className="eyebrow">Share card</span>
-                      <h4>Preview asset</h4>
-                    </div>
-                    <a href={shareCardUrl} target="_blank" rel="noreferrer" className="button-link button-link-subtle">
-                      Open image
-                    </a>
                   </div>
-
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    className="share-card"
-                    src={shareCardUrl}
-                    alt={`HowlHouse share card (${shareCardVisibility})`}
-                  />
                 </div>
-              </>
-            ) : null}
-          </section>
-        </aside>
-      </div>
+              ) : null}
+            </div>
+
+            <div className="recap-artifact-column">
+              <div className="clip-stack">
+                <div className="section-heading">
+                  <span className="eyebrow">Clip list</span>
+                  <h4>Jump to pivotal beats</h4>
+                </div>
+
+                <ol className="clip-list">
+                  {recap.clips.map((clip) => (
+                    <li key={clip.clip_id}>
+                      <button
+                        type="button"
+                        className={`clip-card clip-card-${clip.kind}`}
+                        onClick={() => handleClipClick(clip.start_event_id)}
+                      >
+                        <span className="clip-card-top">
+                          <strong>{clip.title}</strong>
+                          <span className={clipKindClass(clip.kind)}>{clip.kind}</span>
+                        </span>
+                        <span className="clip-card-copy">{clip.reason}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+
+              <div className="share-card-frame">
+                <div className="section-heading section-heading-row">
+                  <div>
+                    <span className="eyebrow">Share card</span>
+                    <h4>Preview artifact</h4>
+                  </div>
+                  <a href={shareCardUrl} target="_blank" rel="noreferrer" className="button-link button-link-subtle">
+                    Open image
+                  </a>
+                </div>
+
+                <span className="meta-pill">{shareCardVisibility === "public" ? "Spoiler-safe public card" : "Spoiler reveal card"}</span>
+
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  className="share-card"
+                  src={shareCardUrl}
+                  alt={`HowlHouse share card (${shareCardVisibility})`}
+                />
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </section>
     </main>
   );
 }

@@ -27,17 +27,21 @@ export function SiteHeader() {
         <div className="brand-lockup">
           <Link href="/" className="brand-link" aria-label="HowlHouse home">
             <span className="brand-mark" aria-hidden="true">
-              <span className="brand-mark-core" />
+              <span className="brand-mark-orbit" />
+              <span className="brand-mark-eclipse" />
               <span className="brand-mark-ring" />
+              <span className="brand-mark-spoke" />
             </span>
             <span className="brand-copy">
-              <span className="brand-wordmark">HowlHouse</span>
+              <span className="brand-wordmark">
+                Howl<span className="brand-wordmark-accent">House</span>
+              </span>
               <span className="brand-tagline">Spectator-first AI Werewolf</span>
             </span>
           </Link>
           <div className="header-signal">
             <span className="signal-dot" aria-hidden="true" />
-            Deterministic replay-backed viewing
+            Deterministic spectator archive
           </div>
         </div>
 
@@ -48,7 +52,7 @@ export function SiteHeader() {
               href={item.href}
               className={isActive(pathname, item.href) ? "nav-link nav-link-active" : "nav-link"}
             >
-              {item.label}
+              <span className="nav-link-copy">{item.label}</span>
             </Link>
           ))}
         </nav>

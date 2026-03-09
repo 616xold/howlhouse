@@ -91,6 +91,10 @@ export function LeagueClient() {
   );
 
   const topEntries = useMemo(() => leaderboard?.entries.slice(0, 3) ?? [], [leaderboard?.entries]);
+  const leadingEntry = topEntries[0] ?? null;
+  const agentNameById = useMemo(() => {
+    return new Map(agents.map((agent) => [agent.agent_id, agent.name]));
+  }, [agents]);
 
   const submitCreateSeason = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
@@ -180,19 +184,52 @@ export function LeagueClient() {
 
   return (
     <main className="page-shell page-stack">
-      <section className="page-banner">
+      <section className="page-banner league-banner">
         <div className="section-heading">
           <p className="breadcrumb">
             <Link href="/">Matches</Link>
             <span>/</span>
             <span>League</span>
           </p>
-          <span className="eyebrow">Competition</span>
-          <h1>League command center</h1>
+          <span className="eyebrow">Competition room</span>
+          <h1>Run a league that feels like a circuit, not a settings page.</h1>
           <p className="section-copy">
-            Launch seasons, rate agents across deterministic matches, and promote standout strategies into
-            tournament brackets without leaving the product shell.
+            Seasons, standings, and tournaments should read like prestige competition. The creation flows stay
+            here, but the story starts with who is leading and what the bracket is about to decide.
           </p>
+        </div>
+
+        <div className="league-banner-dossier">
+          <div className="section-heading">
+            <span className="eyebrow">Season spotlight</span>
+            <h2>{activeSeason ? activeSeason.name : "No active season"}</h2>
+            <p className="section-copy">
+              {activeSeason
+                ? leadingEntry
+                  ? `${leadingEntry.name} currently leads the table at ${leadingEntry.rating.toFixed(2)}.`
+                  : "The season is active, but the standings are still waiting for their first decisive run."
+                : "Activate a season to unlock live standings and tournament creation."}
+            </p>
+          </div>
+
+          <div className="dossier-grid">
+            <div className="dossier-stat">
+              <span className="stat-label">Status</span>
+              <strong>{activeSeason ? formatStatusLabel(activeSeason.status) : "Idle"}</strong>
+            </div>
+            <div className="dossier-stat">
+              <span className="stat-label">Leader</span>
+              <strong>{leadingEntry ? leadingEntry.name : "TBD"}</strong>
+            </div>
+            <div className="dossier-stat">
+              <span className="stat-label">Tournaments</span>
+              <strong>{tournaments.length}</strong>
+            </div>
+            <div className="dossier-stat">
+              <span className="stat-label">Eligible agents</span>
+              <strong>{agents.length}</strong>
+            </div>
+          </div>
         </div>
 
         <div className="metrics-grid metrics-grid-compact">
@@ -227,225 +264,12 @@ export function LeagueClient() {
 
       <section className="split-layout">
         <section className="panel panel-strong">
-          <div className="section-heading">
-            <span className="eyebrow">Season setup</span>
-            <h2>Create a rating ladder</h2>
-            <p className="section-copy">Start a new ladder with a defined rating baseline and immediately activate it if needed.</p>
-          </div>
-
-          <form className="form-grid" onSubmit={submitCreateSeason}>
-            <label className="field">
-              <span className="field-label">Season name</span>
-              <input
-                value={seasonName}
-                onChange={(event) => setSeasonName(event.target.value)}
-                placeholder="Season name"
-              />
-            </label>
-
-            <div className="form-row">
-              <label className="field">
-                <span className="field-label">Initial rating</span>
-                <input
-                  type="number"
-                  value={initialRating}
-                  onChange={(event) => setInitialRating(Number(event.target.value))}
-                  placeholder="Initial rating"
-                />
-              </label>
-              <label className="field">
-                <span className="field-label">K-factor</span>
-                <input
-                  type="number"
-                  value={kFactor}
-                  onChange={(event) => setKFactor(Number(event.target.value))}
-                  placeholder="K-factor"
-                />
-              </label>
-            </div>
-
-            <label className="checkbox-card">
-              <input
-                type="checkbox"
-                checked={activateOnCreate}
-                onChange={(event) => setActivateOnCreate(event.target.checked)}
-              />
-              <span>
-                <strong>Activate immediately</strong>
-                <span className="muted">Switch the leaderboard and tournament creation flows to this season on creation.</span>
-              </span>
-            </label>
-
-            <button type="submit" className="button-primary button-wide" disabled={creatingSeason}>
-              {creatingSeason ? "Creating season..." : "Create season"}
-            </button>
-          </form>
-        </section>
-
-        <section className="panel">
-          <div className="section-heading">
-            <span className="eyebrow">Tournament setup</span>
-            <h2>Seed a deterministic cup</h2>
-            <p className="section-copy">
-              Active seasons unlock reproducible tournament brackets with fixed seeds and explicit participant sets.
-            </p>
-          </div>
-
-          {!activeSeason ? (
-            <div className="empty-state empty-state-compact">
-              <div className="empty-state-art" aria-hidden="true" />
-              <div>
-                <h3>No active season</h3>
-                <p className="muted">Activate a season to create tournaments and populate the active leaderboard.</p>
-              </div>
-            </div>
-          ) : (
-            <form className="form-grid" onSubmit={submitCreateTournament}>
-              <div className="form-row">
-                <label className="field">
-                  <span className="field-label">Tournament name</span>
-                  <input
-                    value={tournamentName}
-                    onChange={(event) => setTournamentName(event.target.value)}
-                    placeholder="Tournament name"
-                  />
-                </label>
-                <label className="field">
-                  <span className="field-label">Seed</span>
-                  <input
-                    type="number"
-                    value={tournamentSeed}
-                    onChange={(event) => setTournamentSeed(Number(event.target.value))}
-                  />
-                </label>
-              </div>
-
-              <label className="field">
-                <span className="field-label">Games per matchup</span>
-                <input
-                  type="number"
-                  min={1}
-                  value={gamesPerMatchup}
-                  onChange={(event) => setGamesPerMatchup(Number(event.target.value))}
-                />
-              </label>
-
-              <div className="field">
-                <span className="field-label">Participants</span>
-                <div className="participant-grid">
-                  {agents.map((agent) => {
-                    const selected = selectedParticipants.has(agent.agent_id);
-                    return (
-                      <label key={agent.agent_id} className={selected ? "participant-card participant-card-active" : "participant-card"}>
-                        <input
-                          type="checkbox"
-                          checked={selected}
-                          onChange={() => toggleParticipant(agent.agent_id)}
-                        />
-                        <span>
-                          <strong>{agent.name}</strong>
-                          <span className="muted">
-                            {agent.version} · {agent.runtime_type}
-                          </span>
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <button type="submit" className="button-primary button-wide" disabled={creatingTournament}>
-                {creatingTournament ? "Creating tournament..." : "Create tournament"}
-              </button>
-            </form>
-          )}
-        </section>
-      </section>
-
-      <section className="section-block">
-        <div className="section-heading section-heading-row">
-          <div>
-            <span className="eyebrow">Season roster</span>
-            <h2>All seasons</h2>
-          </div>
-          {activeSeason ? <span className="meta-pill meta-pill-success">Active {activeSeason.name}</span> : null}
-        </div>
-
-        {loading ? (
-          <div className="catalog-grid">
-            {Array.from({ length: 3 }, (_, index) => (
-              <article key={`season-skeleton-${index}`} className="agent-card skeleton-card">
-                <div className="skeleton-line skeleton-line-short" />
-                <div className="skeleton-line" />
-                <div className="skeleton-line skeleton-line-short" />
-              </article>
-            ))}
-          </div>
-        ) : null}
-
-        {!loading && seasons.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-state-art" aria-hidden="true" />
-            <div>
-              <h3>No seasons yet</h3>
-              <p className="muted">Create the first rating ladder to start tracking agent performance over time.</p>
-            </div>
-          </div>
-        ) : null}
-
-        {!loading && seasons.length > 0 ? (
-          <div className="catalog-grid">
-            {seasons.map((season) => (
-              <article key={season.season_id} className="agent-card">
-                <div className="agent-card-top">
-                  <div>
-                    <h3>{season.name}</h3>
-                    <p className="mono-small">{formatShortId(season.season_id, 10, 8)}</p>
-                  </div>
-                  <span className={seasonStatusClass(season.status)}>{formatStatusLabel(season.status)}</span>
-                </div>
-                <dl className="detail-grid detail-grid-compact">
-                  <div>
-                    <dt>Initial</dt>
-                    <dd>{season.initial_rating}</dd>
-                  </div>
-                  <div>
-                    <dt>K-factor</dt>
-                    <dd>{season.k_factor}</dd>
-                  </div>
-                  <div>
-                    <dt>Created</dt>
-                    <dd>{formatDateTime(season.created_at)}</dd>
-                  </div>
-                  <div>
-                    <dt>Updated</dt>
-                    <dd>{formatDateTime(season.updated_at)}</dd>
-                  </div>
-                </dl>
-                <div className="agent-card-footer">
-                  <Link href={`/league/seasons/${season.season_id}`} className="button-link">
-                    Open season
-                  </Link>
-                  {season.status !== "active" ? (
-                    <button type="button" className="button-secondary" onClick={() => void activateSeason(season.season_id)}>
-                      Activate
-                    </button>
-                  ) : null}
-                </div>
-              </article>
-            ))}
-          </div>
-        ) : null}
-      </section>
-
-      <section className="split-layout">
-        <section className="panel panel-strong">
           <div className="section-heading section-heading-row">
             <div>
               <span className="eyebrow">Leaderboard</span>
               <h2>Active season standings</h2>
               <p className="section-copy">
-                Ratings update from deterministic match outcomes, with links back into the underlying spectator replays.
+                Ratings update from deterministic match outcomes, with every standing tied back to underlying spectator replays.
               </p>
             </div>
             {activeSeason ? (
@@ -460,7 +284,7 @@ export function LeagueClient() {
           {activeSeason && topEntries.length > 0 ? (
             <div className="podium-grid">
               {topEntries.map((entry) => (
-                <article key={entry.agent_id} className="podium-card">
+                <article key={entry.agent_id} className={`podium-card podium-card-rank-${entry.rank}`}>
                   <span className="meta-pill meta-pill-accent">#{entry.rank}</span>
                   <h3>{entry.name}</h3>
                   <p className="mono-small">{entry.version}</p>
@@ -534,7 +358,19 @@ export function LeagueClient() {
                   <dl className="detail-grid detail-grid-compact">
                     <div>
                       <dt>Champion</dt>
-                      <dd>{tournament.champion_agent_id ?? "TBD"}</dd>
+                      <dd>
+                        {tournament.champion_agent_id
+                          ? agentNameById.get(tournament.champion_agent_id) ?? tournament.champion_agent_id
+                          : "TBD"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Entrants</dt>
+                      <dd>{tournament.bracket.participants.length}</dd>
+                    </div>
+                    <div>
+                      <dt>Format</dt>
+                      <dd>{tournament.bracket.games_per_matchup} game(s) per matchup</dd>
                     </div>
                     <div>
                       <dt>Updated</dt>
@@ -549,6 +385,219 @@ export function LeagueClient() {
                 </article>
               ))}
             </div>
+          )}
+        </section>
+      </section>
+
+      <section className="section-block">
+        <div className="section-heading section-heading-row">
+          <div>
+            <span className="eyebrow">Season archive</span>
+            <h2>All seasons</h2>
+          </div>
+          {activeSeason ? <span className="meta-pill meta-pill-success">Active {activeSeason.name}</span> : null}
+        </div>
+
+        {loading ? (
+          <div className="catalog-grid">
+            {Array.from({ length: 3 }, (_, index) => (
+              <article key={`season-skeleton-${index}`} className="agent-card skeleton-card">
+                <div className="skeleton-line skeleton-line-short" />
+                <div className="skeleton-line" />
+                <div className="skeleton-line skeleton-line-short" />
+              </article>
+            ))}
+          </div>
+        ) : null}
+
+        {!loading && seasons.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-state-art" aria-hidden="true" />
+            <div>
+              <h3>No seasons yet</h3>
+              <p className="muted">Create the first rating ladder to start tracking agent performance over time.</p>
+            </div>
+          </div>
+        ) : null}
+
+        {!loading && seasons.length > 0 ? (
+          <div className="catalog-grid">
+            {seasons.map((season) => (
+              <article key={season.season_id} className="agent-card">
+                <div className="agent-card-top">
+                  <div>
+                    <h3>{season.name}</h3>
+                    <p className="mono-small">{formatShortId(season.season_id, 10, 8)}</p>
+                  </div>
+                  <span className={seasonStatusClass(season.status)}>{formatStatusLabel(season.status)}</span>
+                </div>
+                <dl className="detail-grid detail-grid-compact">
+                  <div>
+                    <dt>Initial</dt>
+                    <dd>{season.initial_rating}</dd>
+                  </div>
+                  <div>
+                    <dt>K-factor</dt>
+                    <dd>{season.k_factor}</dd>
+                  </div>
+                  <div>
+                    <dt>Created</dt>
+                    <dd>{formatDateTime(season.created_at)}</dd>
+                  </div>
+                  <div>
+                    <dt>Updated</dt>
+                    <dd>{formatDateTime(season.updated_at)}</dd>
+                  </div>
+                </dl>
+                <div className="agent-card-footer">
+                  <Link href={`/league/seasons/${season.season_id}`} className="button-link">
+                    Open season
+                  </Link>
+                  {season.status !== "active" ? (
+                    <button type="button" className="button-secondary" onClick={() => void activateSeason(season.season_id)}>
+                      Activate
+                    </button>
+                  ) : null}
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : null}
+      </section>
+
+      <section className="split-layout league-workshop">
+        <section className="panel">
+          <div className="section-heading">
+            <span className="eyebrow">Season setup</span>
+            <h2>Create a rating ladder</h2>
+            <p className="section-copy">Keep the baseline explicit, then activate the ladder when you want the standings to rotate.</p>
+          </div>
+
+          <form className="form-grid" onSubmit={submitCreateSeason}>
+            <label className="field">
+              <span className="field-label">Season name</span>
+              <input
+                value={seasonName}
+                onChange={(event) => setSeasonName(event.target.value)}
+                placeholder="Season name"
+              />
+            </label>
+
+            <div className="form-row">
+              <label className="field">
+                <span className="field-label">Initial rating</span>
+                <input
+                  type="number"
+                  value={initialRating}
+                  onChange={(event) => setInitialRating(Number(event.target.value))}
+                  placeholder="Initial rating"
+                />
+              </label>
+              <label className="field">
+                <span className="field-label">K-factor</span>
+                <input
+                  type="number"
+                  value={kFactor}
+                  onChange={(event) => setKFactor(Number(event.target.value))}
+                  placeholder="K-factor"
+                />
+              </label>
+            </div>
+
+            <label className="checkbox-card">
+              <input
+                type="checkbox"
+                checked={activateOnCreate}
+                onChange={(event) => setActivateOnCreate(event.target.checked)}
+              />
+              <span>
+                <strong>Activate immediately</strong>
+                <span className="muted">Switch leaderboard and tournament creation to this season on creation.</span>
+              </span>
+            </label>
+
+            <button type="submit" className="button-primary button-wide" disabled={creatingSeason}>
+              {creatingSeason ? "Creating season..." : "Create season"}
+            </button>
+          </form>
+        </section>
+
+        <section className="panel panel-strong">
+          <div className="section-heading">
+            <span className="eyebrow">Tournament setup</span>
+            <h2>Seed a deterministic cup</h2>
+            <p className="section-copy">
+              Active seasons unlock reproducible brackets with fixed seeds and explicit participant sets.
+            </p>
+          </div>
+
+          {!activeSeason ? (
+            <div className="empty-state empty-state-compact">
+              <div className="empty-state-art" aria-hidden="true" />
+              <div>
+                <h3>No active season</h3>
+                <p className="muted">Activate a season to create tournaments and populate the active leaderboard.</p>
+              </div>
+            </div>
+          ) : (
+            <form className="form-grid" onSubmit={submitCreateTournament}>
+              <div className="form-row">
+                <label className="field">
+                  <span className="field-label">Tournament name</span>
+                  <input
+                    value={tournamentName}
+                    onChange={(event) => setTournamentName(event.target.value)}
+                    placeholder="Tournament name"
+                  />
+                </label>
+                <label className="field">
+                  <span className="field-label">Seed</span>
+                  <input
+                    type="number"
+                    value={tournamentSeed}
+                    onChange={(event) => setTournamentSeed(Number(event.target.value))}
+                  />
+                </label>
+              </div>
+
+              <label className="field">
+                <span className="field-label">Games per matchup</span>
+                <input
+                  type="number"
+                  min={1}
+                  value={gamesPerMatchup}
+                  onChange={(event) => setGamesPerMatchup(Number(event.target.value))}
+                />
+              </label>
+
+              <div className="field">
+                <span className="field-label">Participants</span>
+                <div className="participant-grid">
+                  {agents.map((agent) => {
+                    const selected = selectedParticipants.has(agent.agent_id);
+                    return (
+                      <label key={agent.agent_id} className={selected ? "participant-card participant-card-active" : "participant-card"}>
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          onChange={() => toggleParticipant(agent.agent_id)}
+                        />
+                        <span>
+                          <strong>{agent.name}</strong>
+                          <span className="muted">
+                            {agent.version} · {agent.runtime_type}
+                          </span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <button type="submit" className="button-primary button-wide" disabled={creatingTournament}>
+                {creatingTournament ? "Creating tournament..." : "Create tournament"}
+              </button>
+            </form>
           )}
         </section>
       </section>

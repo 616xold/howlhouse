@@ -62,19 +62,27 @@ export function TournamentDetailClient({ tournamentId }: TournamentDetailClientP
 
   return (
     <main className="page-shell page-stack">
-      <section className="page-banner">
+      <section className="page-banner detail-banner">
         <div className="section-heading">
           <p className="breadcrumb">
             <Link href="/league">League</Link>
             <span>/</span>
             <span>{tournament?.name ?? formatShortId(tournamentId, 10, 8)}</span>
           </p>
-          <span className="eyebrow">Tournament detail</span>
+          <span className="eyebrow">Tournament bracket</span>
           <h1>{tournament?.name ?? "Tournament bracket"}</h1>
           <p className="section-copy">
             Follow the bracket, jump to completed game viewers, and keep tournament execution tied to the same backend job flow.
           </p>
         </div>
+
+        {tournament ? (
+          <div className="feature-strip">
+            <span className={`status-pill status-${tournament.status}`}>{formatStatusLabel(tournament.status)}</span>
+            <span className="meta-pill">Seed {tournament.seed}</span>
+            <span className="meta-pill">{tournament.bracket.rounds.length} rounds</span>
+          </div>
+        ) : null}
 
         {tournament ? (
           <div className="metrics-grid metrics-grid-compact">

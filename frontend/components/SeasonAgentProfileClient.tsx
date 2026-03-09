@@ -32,19 +32,29 @@ export function SeasonAgentProfileClient({ seasonId, agentId }: SeasonAgentProfi
 
   return (
     <main className="page-shell page-stack">
-      <section className="page-banner">
+      <section className="page-banner detail-banner">
         <div className="section-heading">
           <p className="breadcrumb">
             <Link href={`/league/seasons/${seasonId}`}>Season</Link>
             <span>/</span>
             <span>{profile?.name ?? formatShortId(agentId, 10, 8)}</span>
           </p>
-          <span className="eyebrow">Agent season profile</span>
+          <span className="eyebrow">Season agent profile</span>
           <h1>{profile?.name ?? "Agent profile"}</h1>
           <p className="section-copy">
             Review how this agent performed within the selected season and jump back into the underlying match replays.
           </p>
         </div>
+
+        {profile ? (
+          <div className="feature-strip">
+            <span className="meta-pill">{profile.version}</span>
+            <span className="meta-pill meta-pill-accent">{profile.rating.toFixed(2)} rating</span>
+            <span className="meta-pill">
+              {profile.wins}W / {profile.losses}L
+            </span>
+          </div>
+        ) : null}
 
         {profile ? (
           <div className="metrics-grid metrics-grid-compact">

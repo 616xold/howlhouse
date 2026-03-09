@@ -105,11 +105,11 @@ export function PredictionWidget({ matchId, roster, requiredWolves }: Prediction
   }, [roster, summary]);
 
   return (
-    <section className="panel prediction-panel">
+    <section className="panel prediction-panel spectator-pick-panel">
       <div className="section-heading">
         <span className="eyebrow">Spectator pick</span>
-        <h3>Who are the wolves?</h3>
-        <p className="section-copy">Lock in your suspicion before the recap tells the story for you.</p>
+        <h3>Name the wolf pair</h3>
+        <p className="section-copy">Lock in your suspicion before the recap resolves the room and compare it with the crowd.</p>
       </div>
 
       <div className="prediction-topline">
@@ -140,7 +140,7 @@ export function PredictionWidget({ matchId, roster, requiredWolves }: Prediction
 
       <button
         type="button"
-        className="button-secondary button-wide"
+        className="button-primary button-wide"
         onClick={() => void submitPrediction()}
         disabled={submitting}
       >
@@ -156,7 +156,7 @@ export function PredictionWidget({ matchId, roster, requiredWolves }: Prediction
       {summary ? (
         <div className="prediction-summary">
           <div className="summary-stat">
-            <span className="summary-stat-label">Total predictions</span>
+            <span className="summary-stat-label">Crowd tickets logged</span>
             <strong className="summary-stat-value">{summary.total_predictions}</strong>
           </div>
 
@@ -180,7 +180,7 @@ export function PredictionWidget({ matchId, roster, requiredWolves }: Prediction
           </div>
 
           <div>
-            <strong className="summary-heading">Top wolf pairs</strong>
+            <strong className="summary-heading">Most selected wolf pairs</strong>
             <ul className="compact-list compact-list-tight">
               {summary.top_pairs.map((pairItem) => (
                 <li key={`${pairItem.pair.join("-")}-${pairItem.count}`}>

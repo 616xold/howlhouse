@@ -48,7 +48,16 @@ export function AgentsClient() {
   const fetchAgents = useCallback(async () => {
     try {
       const data = await fetchJson<PublicAgentRecord[]>("/agents");
-      setAgents(data);
+      const detailedAgents = await Promise.all(
+        data.map(async (agent) => {
+          try {
+            return await fetchJson<PublicAgentRecord>(`/agents/${agent.agent_id}`);
+          } catch {
+            return agent;
+          }
+        })
+      );
+      setAgents(detailedAgents);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load agents");
     } finally {
@@ -144,21 +153,29 @@ export function AgentsClient() {
 
     return next;
   }, [agents, runtimeFilter, search, sortBy]);
+  const visibleAgentCount = useMemo(
+    () => agents.filter((agent) => agent.hidden_at === null).length,
+    [agents]
+  );
+  const productionSafeCount = useMemo(
+    () => agents.filter((agent) => agent.runtime_type === "docker_py_v1").length,
+    [agents]
+  );
 
   return (
     <main className="page-shell page-stack">
-      <section className="page-banner">
+      <section className="page-banner agents-banner">
         <div className="section-heading">
           <p className="breadcrumb">
             <Link href="/">Matches</Link>
             <span>/</span>
             <span>Agents</span>
           </p>
-          <span className="eyebrow">Catalog</span>
-          <h1>Agent gallery</h1>
+          <span className="eyebrow">Creator roster</span>
+          <h1>Build a catalog that looks like a field guide, not a registry.</h1>
           <p className="section-copy">
-            Register custom participants, scan strategy summaries, and keep runtime choices clear before you
-            drop an agent into a spectator-facing match.
+            Registered agents should read like collectible competitors. Search strategies quickly, scan runtime
+            posture at a glance, and keep uploads tucked into the workshop instead of the spotlight.
           </p>
         </div>
 
@@ -166,12 +183,12 @@ export function AgentsClient() {
           <article className="stat-card">
             <span className="stat-label">Registered agents</span>
             <strong className="stat-value">{agents.length}</strong>
-            <span className="stat-meta">Visible agents are eligible for new tables</span>
+            <span className="stat-meta">{visibleAgentCount} visible for new tables</span>
           </article>
           <article className="stat-card">
-            <span className="stat-label">Primary runtime</span>
-            <strong className="stat-value">docker_py_v1</strong>
-            <span className="stat-meta">Production-safe sandbox</span>
+            <span className="stat-label">Production-safe runtime</span>
+            <strong className="stat-value">{productionSafeCount}</strong>
+            <span className="stat-meta">Cards backed by docker_py_v1</span>
           </article>
           <article className="stat-card">
             <span className="stat-label">Unsafe local runtime</span>
@@ -181,10 +198,133 @@ export function AgentsClient() {
         </div>
       </section>
 
-      <section className="split-layout">
-        <section className="panel panel-strong upload-panel">
+      <section className="split-layout catalog-command">
+        <section className="panel panel-strong catalog-command-main">
+          <div className="section-heading section-heading-row">
+            <div>
+              <span className="eyebrow">Browse roster</span>
+              <h2>Registered agents</h2>
+              <p className="section-copy">
+                Filter by runtime, inspect strategy summaries, and pick the next agent you want in a spectator-facing match.
+              </p>
+            </div>
+            <span className="meta-pill meta-pill-accent">{filteredAgents.length} visible card(s)</span>
+          </div>
+
+          <div className="toolbar-grid">
+            <label className="field field-search">
+              <span className="field-label">Search</span>
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Name, version, runtime, or strategy"
+              />
+            </label>
+            <label className="field">
+              <span className="field-label">Runtime</span>
+              <select value={runtimeFilter} onChange={(event) => setRuntimeFilter(event.target.value)}>
+                <option value="all">All runtimes</option>
+                <option value="docker_py_v1">docker_py_v1</option>
+                {ENABLE_UNSAFE_LOCAL_AGENT_RUNTIME ? <option value="local_py_v1">local_py_v1</option> : null}
+              </select>
+            </label>
+            <label className="field">
+              <span className="field-label">Sort</span>
+              <select value={sortBy} onChange={(event) => setSortBy(event.target.value as "newest" | "oldest" | "name")}>
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="name">Name</option>
+              </select>
+            </label>
+          </div>
+
+          <p className="muted">
+            BYA match creation uses the same inventory you see here, so runtime posture and visibility stay
+            legible before anything goes on air.
+          </p>
+
+          {loadingAgents ? (
+            <div className="catalog-grid">
+              {Array.from({ length: 4 }, (_, index) => (
+                <article key={`agent-skeleton-${index}`} className="agent-card skeleton-card">
+                  <div className="skeleton-line skeleton-line-short" />
+                  <div className="skeleton-line" />
+                  <div className="skeleton-line" />
+                  <div className="skeleton-line skeleton-line-short" />
+                </article>
+              ))}
+            </div>
+          ) : null}
+
+          {!loadingAgents && filteredAgents.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-state-art" aria-hidden="true" />
+              <div>
+                <h3>No agents matched</h3>
+                <p className="muted">
+                  Adjust the filters or ship a new package from the workshop to expand the roster.
+                </p>
+              </div>
+            </div>
+          ) : null}
+
+          {!loadingAgents && filteredAgents.length > 0 ? (
+            <div className="catalog-grid">
+              {filteredAgents.map((agent) => (
+                <article key={agent.agent_id} className="agent-card agent-card-collectible">
+                  <div className="agent-card-top">
+                    <div className="agent-card-heading">
+                      <span className="agent-sigil" aria-hidden="true">
+                        {agent.name.slice(0, 1).toUpperCase()}
+                      </span>
+                      <div>
+                        <h3>{agent.name}</h3>
+                        <p className="mono-small">{formatShortId(agent.agent_id, 10, 8)}</p>
+                      </div>
+                    </div>
+                    <div className="agent-card-badges">
+                      <span className="meta-pill">{agent.version}</span>
+                      <span className={visibilityClass(agent)}>{visibilityLabel(agent)}</span>
+                    </div>
+                  </div>
+
+                  <p className="agent-card-summary">
+                    {summarizeText(agent.strategy_text, "No strategy summary was provided in the uploaded AGENT.md file.")}
+                  </p>
+
+                  <dl className="detail-grid detail-grid-compact">
+                    <div>
+                      <dt>Runtime</dt>
+                      <dd>{agent.runtime_type}</dd>
+                    </div>
+                    <div>
+                      <dt>Updated</dt>
+                      <dd>{formatRelativeTime(agent.updated_at)}</dd>
+                    </div>
+                    <div>
+                      <dt>Safety</dt>
+                      <dd>{agent.runtime_type === "docker_py_v1" ? "Production-safe sandbox" : "Unsafe local mode"}</dd>
+                    </div>
+                    <div>
+                      <dt>Created</dt>
+                      <dd>{formatDateTime(agent.created_at)}</dd>
+                    </div>
+                  </dl>
+
+                  <div className="agent-card-footer">
+                    <Link href={`/agents/${agent.agent_id}`} className="button-link">
+                      Open profile
+                    </Link>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : null}
+        </section>
+
+        <aside className="panel upload-panel">
           <div className="section-heading">
-            <span className="eyebrow">Upload</span>
+            <span className="eyebrow">Workshop</span>
             <h2>Ship a new strategy package</h2>
             <p className="section-copy">
               Upload a ZIP containing <code>agent.py</code> and an <code>AGENT.md</code> file with a
@@ -268,118 +408,7 @@ export function AgentsClient() {
             </div>
           ) : null}
           {successMessage ? <div className="message-banner">{successMessage}</div> : null}
-        </section>
-
-        <section className="panel">
-          <div className="section-heading">
-            <span className="eyebrow">Browse</span>
-            <h2>Find an agent quickly</h2>
-          </div>
-
-          <div className="toolbar-grid">
-            <label className="field field-search">
-              <span className="field-label">Search</span>
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Name, version, runtime, or strategy"
-              />
-            </label>
-            <label className="field">
-              <span className="field-label">Runtime</span>
-              <select value={runtimeFilter} onChange={(event) => setRuntimeFilter(event.target.value)}>
-                <option value="all">All runtimes</option>
-                <option value="docker_py_v1">docker_py_v1</option>
-                {ENABLE_UNSAFE_LOCAL_AGENT_RUNTIME ? <option value="local_py_v1">local_py_v1</option> : null}
-              </select>
-            </label>
-            <label className="field">
-              <span className="field-label">Sort</span>
-              <select value={sortBy} onChange={(event) => setSortBy(event.target.value as "newest" | "oldest" | "name")}>
-                <option value="newest">Newest first</option>
-                <option value="oldest">Oldest first</option>
-                <option value="name">Name</option>
-              </select>
-            </label>
-          </div>
-
-          <p className="muted">
-            {filteredAgents.length} result(s). BYA match creation uses the same registered agent inventory you see
-            here.
-          </p>
-        </section>
-      </section>
-
-      <section className="section-block">
-        <div className="section-heading">
-          <span className="eyebrow">Registry</span>
-          <h2>Registered agents</h2>
-        </div>
-
-        {loadingAgents ? (
-          <div className="catalog-grid">
-            {Array.from({ length: 4 }, (_, index) => (
-              <article key={`agent-skeleton-${index}`} className="agent-card skeleton-card">
-                <div className="skeleton-line skeleton-line-short" />
-                <div className="skeleton-line" />
-                <div className="skeleton-line" />
-                <div className="skeleton-line skeleton-line-short" />
-              </article>
-            ))}
-          </div>
-        ) : null}
-
-        {!loadingAgents && filteredAgents.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-state-art" aria-hidden="true" />
-            <div>
-              <h3>No agents matched</h3>
-              <p className="muted">
-                Adjust the filters above or upload a new package to populate the gallery with strategy cards.
-              </p>
-            </div>
-          </div>
-        ) : null}
-
-        {!loadingAgents && filteredAgents.length > 0 ? (
-          <div className="catalog-grid">
-            {filteredAgents.map((agent) => (
-              <article key={agent.agent_id} className="agent-card">
-                <div className="agent-card-top">
-                  <div>
-                    <h3>{agent.name}</h3>
-                    <p className="mono-small">{formatShortId(agent.agent_id, 10, 8)}</p>
-                  </div>
-                  <div className="agent-card-badges">
-                    <span className="meta-pill">{agent.runtime_type}</span>
-                    <span className={visibilityClass(agent)}>{visibilityLabel(agent)}</span>
-                  </div>
-                </div>
-
-                <p className="agent-card-summary">
-                  {summarizeText(agent.strategy_text, "No strategy summary was provided in the uploaded AGENT.md file.")}
-                </p>
-
-                <dl className="detail-grid detail-grid-compact">
-                  <div>
-                    <dt>Created</dt>
-                    <dd>{formatDateTime(agent.created_at)}</dd>
-                  </div>
-                  <div>
-                    <dt>Updated</dt>
-                    <dd>{formatRelativeTime(agent.updated_at)}</dd>
-                  </div>
-                </dl>
-
-                <div className="agent-card-footer">
-                  <Link href={`/agents/${agent.agent_id}`} className="button-link">
-                    Open profile
-                  </Link>
-                </div>
-              </article>
-            ))}
-          </div>
-        ) : null}
+        </aside>
       </section>
     </main>
   );

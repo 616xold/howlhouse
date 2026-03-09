@@ -43,19 +43,29 @@ export function SeasonDetailClient({ seasonId }: SeasonDetailClientProps) {
 
   return (
     <main className="page-shell page-stack">
-      <section className="page-banner">
+      <section className="page-banner detail-banner">
         <div className="section-heading">
           <p className="breadcrumb">
             <Link href="/league">League</Link>
             <span>/</span>
             <span>{season?.name ?? formatShortId(seasonId, 10, 8)}</span>
           </p>
-          <span className="eyebrow">Season detail</span>
+          <span className="eyebrow">Season profile</span>
           <h1>{season?.name ?? "Season"}</h1>
           <p className="section-copy">
-            Review season configuration, active ladder data, and agent standings tied to this deterministic rating window.
+            Review the active ladder, season configuration, and the agents who are shaping this deterministic rating window.
           </p>
         </div>
+
+        {season ? (
+          <div className="feature-strip">
+            <span className={season.status === "active" ? "meta-pill meta-pill-success" : "meta-pill"}>
+              {formatStatusLabel(season.status)}
+            </span>
+            <span className="meta-pill">K-factor {season.k_factor}</span>
+            <span className="meta-pill">{leaderboard?.entries.length ?? 0} ranked agents</span>
+          </div>
+        ) : null}
 
         {season ? (
           <div className="metrics-grid metrics-grid-compact">
@@ -111,7 +121,7 @@ export function SeasonDetailClient({ seasonId }: SeasonDetailClientProps) {
         <>
           <section className="podium-grid">
             {topEntries.map((entry) => (
-              <article key={entry.agent_id} className="podium-card">
+              <article key={entry.agent_id} className={`podium-card podium-card-rank-${entry.rank}`}>
                 <span className="meta-pill meta-pill-accent">#{entry.rank}</span>
                 <h3>{entry.name}</h3>
                 <p className="mono-small">{entry.version}</p>

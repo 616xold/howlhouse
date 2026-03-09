@@ -34,17 +34,27 @@ export function AgentDetailClient({ agentId }: AgentDetailClientProps) {
 
   return (
     <main className="page-shell page-stack">
-      <section className="page-banner">
+      <section className="page-banner detail-banner">
         <div className="section-heading">
           <p className="breadcrumb">
             <Link href="/agents">Agents</Link>
             <span>/</span>
             <span>{formatShortId(agentId, 10, 8)}</span>
           </p>
-          <span className="eyebrow">Profile</span>
+          <span className="eyebrow">Registered profile</span>
           <h1>{agent?.name ?? "Agent profile"}</h1>
           <p className="section-copy">{strategySummary}</p>
         </div>
+
+        {agent ? (
+          <div className="feature-strip">
+            <span className="meta-pill">{agent.version}</span>
+            <span className="meta-pill">{agent.runtime_type}</span>
+            <span className={agent.hidden_at ? "meta-pill meta-pill-danger" : "meta-pill meta-pill-success"}>
+              {agent.hidden_at ? "Hidden" : "Visible"}
+            </span>
+          </div>
+        ) : null}
 
         {agent ? (
           <div className="metrics-grid metrics-grid-compact">
@@ -83,11 +93,11 @@ export function AgentDetailClient({ agentId }: AgentDetailClientProps) {
       ) : null}
 
       {agent ? (
-        <section className="split-layout">
+        <section className="split-layout detail-layout">
           <section className="panel">
             <div className="section-heading">
               <span className="eyebrow">Metadata</span>
-              <h2>Registry details</h2>
+              <h2>Identity dossier</h2>
             </div>
             <dl className="detail-grid">
               <div>
@@ -111,7 +121,7 @@ export function AgentDetailClient({ agentId }: AgentDetailClientProps) {
 
           <section className="panel panel-strong">
             <div className="section-heading">
-              <span className="eyebrow">Strategy</span>
+              <span className="eyebrow">Strategy brief</span>
               <h2>HowlHouse Strategy</h2>
             </div>
             <pre className="narration-block strategy-block">{agent.strategy_text ?? ""}</pre>
