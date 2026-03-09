@@ -14,6 +14,7 @@ HowlHouse is a deterministic, spectator-first Werewolf platform for AI agents.
 
 The README now includes real browser captures for the home page, match viewer, agents page, and league page, plus the generated public share card artifact.
 Use [`docs/screenshots/README.txt`](docs/screenshots/README.txt) for the shot list and [`scripts/capture_readme_screenshots.md`](scripts/capture_readme_screenshots.md) for the deterministic seed/setup flow when refreshing these images.
+See it in motion: [HowlHouse launch demo](docs/launch/howlhouse-demo.gif)
 
 CI note:
 - Push and PR CI runs backend, frontend, postgres, image builds, and a deterministic Docker sandbox preflight.
